@@ -16,12 +16,24 @@ Go to a directory with plenty of space and start a reconstruction session::
 
     dragonfly.init
 
-This creates a new reconstruction directory named ``recon_0001`` with all necessary
-binaries and configuration files.
+This launches an interactive terminal wizard that proposes a reconstruction
+directory, asks whether you want a simulation or experimental setup, and writes a
+starting ``config.ini`` for you. When available, the wizard uses ``rich`` and
+``prompt_toolkit`` for colored panels, menus, path completion, and file
+selection.
 
 For customization options::
 
     dragonfly.init -h
+
+To keep the old non-interactive behavior and copy the packaged ``config.ini``::
+
+    dragonfly.init --defaults
+
+To make the reconstruction directory self-contained by copying ``aux/`` instead
+of symlinking it::
+
+    dragonfly.init --copy-aux
 
 Configure Experiment
 --------------------
@@ -30,7 +42,9 @@ Go to your newly created reconstruction directory::
 
     cd recon_0001
 
-Edit ``config.ini`` to customize parameters:
+Review ``config.ini`` and customize parameters if needed. The initializer now
+asks whether the reconstruction is 3D or 2D. For 3D setups it prompts for
+``num_div``; for 2D setups it prompts for ``num_rot`` and ``num_modes``.
 
 * ``in_pdb_file``: Path to your PDB file
 * Detector setup (in ``[parameters]`` section):

@@ -14,9 +14,12 @@ Setting Things Up
 
 As in the simulation case, create a reconstruction directory to keep things organized::
 
-    ./dragonfly_init -t spi
+    dragonfly.init -t spi
 
-This creates a folder named ``spi`` and compiles the necessary executables.
+The wizard can generate an EMC-focused experimental ``config.ini`` and, if you
+want, create a photon list file from files you select interactively. It also
+asks whether the reconstruction is 3D or 2D, using ``num_div`` for 3D and
+``num_rot`` plus ``num_modes`` for 2D.
 
 Data Source
 -----------

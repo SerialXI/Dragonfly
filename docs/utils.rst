@@ -9,7 +9,7 @@ Command-line Tools
 
 The package provides several command-line tools:
 
-* ``dragonfly.init`` - Initialize new reconstruction
+* ``dragonfly.init`` - Initialize a reconstruction with an interactive terminal wizard powered by ``prompt_toolkit`` and ``rich``; supports ``--copy-aux`` for self-contained setups
 
 **Utilities to simulate data:**
 
