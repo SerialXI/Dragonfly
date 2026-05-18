@@ -29,6 +29,8 @@ scikit-learn
 # Visualization and GUIs
 matplotlib
 PyQt5
+prompt_toolkit
+rich
 
 # Optional: for building documentation
 sphinx

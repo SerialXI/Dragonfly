@@ -35,6 +35,8 @@ dependencies = [
     'scikit-learn',
     'matplotlib',
     'pyqt5',
+    'prompt_toolkit',
+    'rich',
 ]
 
 # Optional dependencies
@@ -75,4 +77,3 @@ packages = [
 'dragonfly.utils.make_data' = 'dragonfly.utils.make_data:main'
 'dragonfly.utils.sim_setup' = 'dragonfly.utils.sim_setup:main'
 #'dragonfly.utils.compare' = 'dragonfly.utils.compare:main'
-
