@@ -39,9 +39,8 @@ def add_class_hbox(gui, vbox):
 
 class MyNavigationToolbar(NavigationToolbar2QT):
     def _icon(self, name, color=None):
-        fname = os.path.abspath(os.path.dirname(__file__) + '/../../aux/icons/'+name) 
+        fname = os.path.abspath(os.path.dirname(__file__) + '/icons/' + name)
         pm = QtGui.QPixmap(fname)
         #if hasattr(pm, 'setDevicePixelRatio'):
         #    pm.setDevicePixelRatio(self.canvas._dpi_ratio)
         return QtGui.QIcon(pm)
-
