@@ -14,12 +14,15 @@ Setting Things Up
 
 As in the simulation case, create a reconstruction directory to keep things organized::
 
-    dragonfly.init -t spi
+    dragonfly.init -t spi --legacy
 
-The wizard can generate an EMC-focused experimental ``config.ini`` and, if you
-want, create a photon list file from files you select interactively. It also
-asks whether the reconstruction is 3D or 2D, using ``num_div`` for 3D and
-``num_rot`` plus ``num_modes`` for 2D.
+For the AMO 86615 example, start from the sample configuration instead of using
+the interactive TUI to build an experimental config from scratch. Copy the
+sample config and its companion mask file from ``sample_configs/amo86615/`` into
+your reconstruction directory and rename the config to ``config.ini``::
+
+    cp sample_configs/amo86615/config.ini <recon_dir>/config.ini
+    cp sample_configs/amo86615/mask_pnccd_back_260_257.byt <recon_dir>/
 
 Data Source
 -----------
@@ -56,7 +59,7 @@ Detector File
 Add the ``[make_detector]`` section to create the detector geometry file::
 
     [make_detector]
-    in_mask_file = aux/mask_pnccd_back_260_257.byt
+    in_mask_file = mask_pnccd_back_260_257.byt
     out_detector_file = data/det_pnccd_back.h5
 
 Generate the detector file by running::
@@ -104,9 +107,10 @@ Create the photon list file (e.g., ``experiment_files.txt``) with paths to all E
     data/run_002.emc
     ...
 
-The ``beta`` parameter controls the sharpness of the orientation probability distribution.
-The ``beta_schedule`` specifies the deterministic annealing schedule where beta
-is multiplied by sqrt(2) every 10 iterations. These aid convergence with high signal data.
+For this experimental workflow, ``beta = 0.001`` sets a uniform initial
+``beta_start`` across frames. The ``beta_schedule`` then specifies the
+deterministic annealing schedule where that starting value is effectively scaled
+by sqrt(2) every 10 iterations. These aid convergence with high signal data.
 
 Running and Monitoring
 ----------------------
