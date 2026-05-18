@@ -42,7 +42,6 @@ except ImportError:
     Table = None
     HAS_RICH = False
 
-
 SIM_DEFAULTS = {
     'parameters': {
         'detd': '300',
@@ -131,20 +130,16 @@ PT_DIALOG_STYLE = PTStyle.from_dict({
     'focused': 'bg:#4d535b #ffffff',
 }) if PTStyle is not None else None
 
-
 def _name_recon_dir(tag, num):
     return '%s_%04d' % (tag, num)
 
-
 def _supports_color():
     return sys.stdout.isatty() and os.environ.get('TERM', 'dumb') != 'dumb'
-
 
 def _style(text, key):
     if not _supports_color():
         return text
     return '%s%s%s' % (COLOR[key], text, COLOR['reset'])
-
 
 def _print_banner():
     if HAS_RICH:
@@ -159,7 +154,6 @@ def _print_banner():
     print('Interactive setup for simulation or experimental data workflows')
     print(_style('=' * 80, 'section'))
 
-
 def _print_section(title):
     if HAS_RICH:
         CONSOLE.rule('[bold cyan]%s[/bold cyan]' % title)
@@ -168,27 +162,20 @@ def _print_section(title):
     print(_style(title, 'section'))
     print(_style('-' * len(title), 'section'))
 
-
-def _print_info(message):
+def _print_message(message, level=None):
     if HAS_RICH:
-        CONSOLE.print(message, markup=False)
+        if level == 'warning':
+            CONSOLE.print(message, style='yellow', markup=False)
+        elif level == 'error':
+            CONSOLE.print(message, style='red', markup=False)
+        else:
+            CONSOLE.print(message, markup=False)
         return
-    print(message)
-
-
-def _print_warning(message):
-    if HAS_RICH:
-        CONSOLE.print(message, style='yellow', markup=False)
-        return
-    print(_style(message, 'warn'))
-
-
-def _print_error(message):
-    if HAS_RICH:
-        CONSOLE.print(message, style='red', markup=False)
-        return
-    print(_style(message, 'error'))
-
+    key = {'warning': 'warn', 'error': 'error'}.get(level)
+    if key is None:
+        print(message)
+    else:
+        print(_style(message, key))
 
 def _print_success(label, value):
     if HAS_RICH:
@@ -197,12 +184,10 @@ def _print_success(label, value):
         return
     print('%s: %s' % (label, _style(value, 'value')))
 
-
 def _first_available_num(tag, num, prefix):
     while op.exists(op.join(prefix, _name_recon_dir(tag, num))):
         num += 1
     return num
-
 
 def _legacy_create_new_recon_dir(tag='recon', num=1, prefix='./'):
     recon_num = _first_available_num(tag, num, prefix)
@@ -217,7 +202,6 @@ def _legacy_create_new_recon_dir(tag='recon', num=1, prefix='./'):
         os.symlink(recon_dir, link_name)
     return recon_dir
 
-
 def _setup_aux_dir(recon_dir, parent_dir, copy_aux=False):
     src = op.join(parent_dir, 'aux')
     dst = op.join(recon_dir, 'aux')
@@ -227,11 +211,9 @@ def _setup_aux_dir(recon_dir, parent_dir, copy_aux=False):
         else:
             os.symlink(src, dst)
 
-
 def _copy_default_config(recon_dir, parent_dir):
     src = op.join(parent_dir, 'config.ini')
     shutil.copy(src, op.join(recon_dir, 'config.ini'))
-
 
 def _parse_yes_no(raw, default=True):
     if not raw.strip():
@@ -242,7 +224,6 @@ def _parse_yes_no(raw, default=True):
     if answer in ('n', 'no'):
         return False
     raise ValueError
-
 
 def _prompt_text(label, default=None, allow_empty=False):
     while True:
@@ -265,8 +246,7 @@ def _prompt_text(label, default=None, allow_empty=False):
                 return ''
         elif raw.strip() or allow_empty:
             return raw.strip()
-        _print_error('A value is required.')
-
+        _print_message('A value is required.', level='error')
 
 def _prompt_path_text(label, default=None, only_directories=False):
     completer = None
@@ -285,8 +265,7 @@ def _prompt_path_text(label, default=None, only_directories=False):
             return default
         if raw.strip():
             return raw.strip()
-        _print_error('A value is required.')
-
+        _print_message('A value is required.', level='error')
 
 def _prompt_yes_no(label, default=True):
     if HAS_PROMPT_TOOLKIT:
@@ -306,8 +285,7 @@ def _prompt_yes_no(label, default=True):
         try:
             return _parse_yes_no(raw, default=default)
         except ValueError:
-            _print_error("Please respond with 'y' or 'n'.")
-
+            _print_message("Please respond with 'y' or 'n'.", level='error')
 
 def _prompt_choice(label, options, default=None):
     if HAS_PROMPT_TOOLKIT:
@@ -336,8 +314,7 @@ def _prompt_choice(label, options, default=None):
             return default
         if raw.isdigit() and 1 <= int(raw) <= len(options):
             return int(raw)
-        _print_error('Enter one of the numbered options.')
-
+        _print_message('Enter one of the numbered options.', level='error')
 
 def _prompt_int(label, default=None, minimum=None):
     while True:
@@ -345,13 +322,12 @@ def _prompt_int(label, default=None, minimum=None):
         try:
             value = int(raw)
         except ValueError:
-            _print_error('Enter an integer value.')
+            _print_message('Enter an integer value.', level='error')
             continue
         if minimum is not None and value < minimum:
-            _print_error('Value must be at least %d.' % minimum)
+            _print_message('Value must be at least %d.' % minimum, level='error')
             continue
         return value
-
 
 def _prompt_float(label, default=None, minimum=None):
     while True:
@@ -359,56 +335,42 @@ def _prompt_float(label, default=None, minimum=None):
         try:
             value = float(raw)
         except ValueError:
-            _print_error('Enter a numeric value.')
+            _print_message('Enter a numeric value.', level='error')
             continue
         if minimum is not None and value < minimum:
-            _print_error('Value must be at least %s.' % minimum)
+            _print_message('Value must be at least %s.' % minimum, level='error')
             continue
         return raw
-
 
 def _prompt_detsize(default='150'):
     while True:
         raw = _prompt_text('Detector size in pixels (one value or X Y)', default=default)
         parts = raw.split()
         if len(parts) not in (1, 2):
-            _print_error('Enter one integer or two integers separated by spaces.')
+            _print_message('Enter one integer or two integers separated by spaces.', level='error')
             continue
         try:
             values = [int(part) for part in parts]
         except ValueError:
-            _print_error('Detector size must contain integers only.')
+            _print_message('Detector size must contain integers only.', level='error')
             continue
         if min(values) <= 0:
-            _print_error('Detector size values must be positive.')
+            _print_message('Detector size values must be positive.', level='error')
             continue
         return ' '.join(str(value) for value in values)
 
-
 def _prompt_beta_schedule(default='2.0 10'):
-    while True:
-        raw = _prompt_text('Beta schedule as <factor> <period>', default=default)
-        parts = raw.split()
-        if len(parts) != 2:
-            _print_error('Enter two values, for example: 2.0 10')
-            continue
-        try:
-            factor = float(parts[0])
-            period = int(parts[1])
-        except ValueError:
-            _print_error('Beta schedule needs a float and an integer.')
-            continue
-        if factor <= 0 or period <= 0:
-            _print_error('Both beta schedule values must be positive.')
-            continue
-        return '%s %s' % (parts[0], parts[1])
-
+    jump_default, period_default = default.split()
+    period = _prompt_int('Change beta_factor every how many iterations?',
+                         default=int(period_default), minimum=1)
+    jump = _prompt_float('Multiply beta_factor by how much at each change?',
+                         default=jump_default, minimum=0)
+    return '%s %d' % (jump, period)
 
 def _prompt_recon_type(default='3d'):
     default_choice = 1 if default == '3d' else 2
     choice = _prompt_choice('Reconstruction type', ['3D', '2D'], default=default_choice)
     return '3d' if choice == 1 else '2d'
-
 
 def _prompt_recon_shape_params(emc, defaults_2d=None):
     recon_type = _prompt_recon_type(default=emc.get('recon_type', '3d'))
@@ -427,22 +389,19 @@ def _prompt_recon_shape_params(emc, defaults_2d=None):
         emc['num_rot'] = str(_prompt_int('Number of in-plane rotations', default=int(rot_default), minimum=1))
         emc['num_modes'] = str(_prompt_int('Number of modes', default=int(modes_default), minimum=1))
 
-
 def _prompt_existing_path(label, default=None):
     while True:
         raw = _prompt_path_text(label, default=default)
         if op.exists(raw):
             return op.realpath(raw)
-        _print_error('Path does not exist: %s' % raw)
-
+        _print_message('Path does not exist: %s' % raw, level='error')
 
 def _prompt_existing_dir(label, default=None):
     while True:
         raw = _prompt_path_text(label, default=default, only_directories=True)
         if op.isdir(raw):
             return op.realpath(raw)
-        _print_error('Directory does not exist: %s' % raw)
-
+        _print_message('Directory does not exist: %s' % raw, level='error')
 
 def _parse_index_selection(raw, max_index):
     selected = []
@@ -474,14 +433,13 @@ def _parse_index_selection(raw, max_index):
         raise ValueError
     return selected
 
-
 def _pick_files_from_directory():
     while True:
         folder = op.realpath(_prompt_existing_dir('Folder containing photon files', default='.'))
         entries = [name for name in sorted(os.listdir(folder))
                    if op.isfile(op.join(folder, name))]
         if not entries:
-            _print_warning('No files found in %s' % folder)
+            _print_message('No files found in %s' % folder, level='warning')
             continue
         if HAS_PROMPT_TOOLKIT:
             values = [(name, name) for name in entries]
@@ -495,7 +453,7 @@ def _pick_files_from_directory():
             ).run()
             if selection:
                 return folder, list(selection)
-            _print_warning('Select at least one file.')
+            _print_message('Select at least one file.', level='warning')
             continue
         _print_section('File Picker')
         print('Select files using syntax like 1,3,8-12')
@@ -506,10 +464,9 @@ def _pick_files_from_directory():
             try:
                 selection = _parse_index_selection(raw, len(entries))
             except ValueError:
-                _print_error('Invalid selection. Use syntax like 1,3,8-12.')
+                _print_message('Invalid selection. Use syntax like 1,3,8-12.', level='error')
                 continue
             return folder, [entries[idx-1] for idx in selection]
-
 
 def _propose_recon_location(initial_tag, initial_num, initial_prefix):
     tag = initial_tag
@@ -535,7 +492,7 @@ def _propose_recon_location(initial_tag, initial_num, initial_prefix):
         )
         if choice == 1:
             if op.exists(recon_dir):
-                _print_warning('That directory already exists. Pick another run number.')
+                _print_message('That directory already exists. Pick another run number.', level='warning')
                 continue
             return tag, run_num, prefix
         if choice == 2:
@@ -548,11 +505,9 @@ def _propose_recon_location(initial_tag, initial_num, initial_prefix):
         prefix = op.realpath(_prompt_existing_dir('Parent directory', default=prefix))
         run_num = _first_available_num(tag, 1, prefix)
 
-
 def _prompt_config_style():
     choice = _prompt_choice('Config file style', ['Keep helpful comments', 'Write a clean config'], default=1)
     return choice == 1
-
 
 def _prompt_simulation_config(recon_dir, parent_dir):
     config = {section: values.copy() for section, values in SIM_DEFAULTS.items()}
@@ -590,12 +545,11 @@ def _prompt_simulation_config(recon_dir, parent_dir):
     emc = config['emc']
     _prompt_recon_shape_params(emc)
     emc['need_scaling'] = '1' if _prompt_yes_no('Enable fluence scaling', default=True) else '0'
-    _print_info('beta_start[d] is computed per frame. The iteration factor is')
-    _print_info('beta_factor * beta_schedule[0]**((i-1)//beta_schedule[1]).')
+    _print_message('beta_start[d] is computed per frame. The iteration factor is')
+    _print_message('beta_factor * beta_schedule[0]**((i-1)//beta_schedule[1]).')
     emc['beta_factor'] = _prompt_float('Initial beta_factor', default=emc['beta_factor'], minimum=0)
     emc['beta_schedule'] = _prompt_beta_schedule(default=emc['beta_schedule'])
     return config
-
 
 def _prompt_experimental_photons(recon_dir):
     _print_section('Photon Inputs')
@@ -620,7 +574,6 @@ def _prompt_experimental_photons(recon_dir):
     _print_success('Wrote photon list', list_path)
     return {'in_photons_list': list_name}
 
-
 def _prompt_experimental_config(recon_dir):
     config = {section: values.copy() for section, values in EXP_DEFAULTS.items()}
     config['emc'].update(_prompt_experimental_photons(recon_dir))
@@ -632,12 +585,11 @@ def _prompt_experimental_config(recon_dir):
     emc['log_file'] = _prompt_text('Log file', default=emc['log_file'])
     _prompt_recon_shape_params(emc, defaults_2d=RECON_DEFAULTS_2D)
     emc['need_scaling'] = '1' if _prompt_yes_no('Enable fluence scaling', default=True) else '0'
-    _print_info('beta_start[d] is computed per frame. The iteration factor is')
-    _print_info('beta_factor * beta_schedule[0]**((i-1)//beta_schedule[1]).')
+    _print_message('beta_start[d] is computed per frame. The iteration factor is')
+    _print_message('beta_factor * beta_schedule[0]**((i-1)//beta_schedule[1]).')
     emc['beta_factor'] = _prompt_float('Initial beta_factor', default=emc['beta_factor'], minimum=0)
     emc['beta_schedule'] = _prompt_beta_schedule(default=emc['beta_schedule'])
     return config
-
 
 def _render_config(config, keep_comments, workflow):
     lines = []
@@ -676,11 +628,9 @@ def _render_config(config, keep_comments, workflow):
         lines.append('')
     return '\n'.join(lines).rstrip() + '\n'
 
-
 def _write_generated_config(recon_dir, config_text):
     with open(op.join(recon_dir, 'config.ini'), 'w') as fptr:
         fptr.write(config_text)
-
 
 def _run_legacy_setup(args, parent_dir):
     new_recon_dir = _legacy_create_new_recon_dir(tag=args.recon_tag, num=args.run_tag,
@@ -694,7 +644,6 @@ def _run_legacy_setup(args, parent_dir):
         print('Created new directory:', new_recon_dir)
     _setup_aux_dir(new_recon_dir, parent_dir, copy_aux=args.copy_aux)
     _copy_default_config(new_recon_dir, parent_dir)
-
 
 def _run_interactive_setup(args, parent_dir):
     _print_banner()
@@ -718,7 +667,6 @@ def _run_interactive_setup(args, parent_dir):
     _print_success('Created new directory', recon_dir)
     _print_success('Config file', op.join(recon_dir, 'config.ini'))
     _print_success('Next step', 'cd %s' % recon_dir)
-
 
 def main():
     '''Parse command line arguments and create a new reconstruction directory.'''
@@ -744,7 +692,6 @@ def main():
         _run_interactive_setup(args, parent_dir)
     else:
         _run_legacy_setup(args, parent_dir)
-
 
 if __name__ == '__main__':
     main()
