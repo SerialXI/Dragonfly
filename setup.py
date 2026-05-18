@@ -81,7 +81,7 @@ setup(name='dragonfly-spi',
       cmdclass={'build_ext': CcacheBuildExt},
       package_data={'':['config.ini',
                         'aux/*',
-                        'aux/icons/*',
+                        'utils/py_src/icons/*',
                         'utils/py_src/style.css',
                        ]},
-)
+      )
