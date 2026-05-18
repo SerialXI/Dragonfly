@@ -589,6 +589,23 @@ def _prompt_experimental_config(recon_dir):
     _print_message('beta_factor * beta_schedule[0]**((i-1)//beta_schedule[1]).')
     emc['beta_factor'] = _prompt_float('Initial beta_factor', default=emc['beta_factor'], minimum=0)
     emc['beta_schedule'] = _prompt_beta_schedule(default=emc['beta_schedule'])
+    ordered_emc = {}
+    for key in ('in_photons_file', 'in_photons_list', 'in_detector_file', 'in_detector_list'):
+        if key in emc:
+            ordered_emc[key] = emc[key]
+    for key in ('recon_type', 'output_folder', 'log_file', 'need_scaling'):
+        if key in emc:
+            ordered_emc[key] = emc[key]
+    for key in ('num_div', 'num_rot', 'num_modes'):
+        if key in emc:
+            ordered_emc[key] = emc[key]
+    for key in ('beta', 'beta_factor', 'beta_schedule'):
+        if key in emc:
+            ordered_emc[key] = emc[key]
+    for key, value in emc.items():
+        if key not in ordered_emc:
+            ordered_emc[key] = value
+    config['emc'] = ordered_emc
     return config
 
 def _render_config(config, keep_comments, workflow):
