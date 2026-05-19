@@ -1,8 +1,13 @@
 Installation
 ============
 
-Dragonfly can be installed from PyPI or built from source. The package
-requires MPI for parallel execution.
+Dragonfly is distributed on PyPI as ``dragonfly-spi`` and the source repository
+is hosted at ``github.com/SerialXI/dragonfly``. The Python package you import is
+named ``dragonfly``.
+
+Installing the Python package builds Cython extensions, so a working compiler
+toolchain and the external scientific libraries used by Dragonfly must be
+available at install time.
 
 Prerequisites
 -------------
@@ -11,7 +16,7 @@ System dependencies:
 
 * **MPI** (OpenMPI or MPICH)
 * **GSL** (GNU Scientific Library)
-* **HDF5** (with parallel support)
+* **HDF5**
 * **OpenMP** (usually included with compiler)
 
 Python dependencies:
@@ -26,106 +31,91 @@ Python dependencies:
 Install from PyPI
 -----------------
 
-The easiest way to install is via pip::
+Install the published package with ``pip``::
 
-    pip install dragonfly-spi
+    python -m pip install dragonfly-spi
 
-For HPC environments with MPI modules::
+This installs the ``dragonfly`` Python package and its command-line tools.
+
+On HPC systems, load the MPI module you want to use before installation so
+``mpi4py`` and the compiled extensions link against the same MPI library::
 
     module load mpi/openmpi-x.x.x
-    pip install mpi4py
-    pip install dragonfly-spi
+    python -m pip install dragonfly-spi
 
 .. note::
 
-    mpi4py must be installed after loading your system's MPI library.
-    It will not work if installed before the MPI module is loaded.
+    The build process expects tools such as ``mpicc``, ``gsl-config``, and
+    ``h5cc`` to be available on ``PATH``.
 
 Install from Source
 -------------------
 
 Clone the repository::
 
-    git clone https://github.com/duaneloh/Dragonfly.git
-    cd Dragonfly
+    git clone https://github.com/SerialXI/dragonfly.git
+    cd dragonfly
 
 Install Python dependencies::
 
-    pip install -r requirements.txt
+    python -m pip install -r requirements.txt
 
 .. note::
 
-    On HPC systems, load your MPI module before installing::
+    On managed systems, load the required compiler, MPI, HDF5, and GSL modules
+    before running the install commands.
 
-        module load mpi/openmpi-x.x.x
-        pip install mpi4py
-        pip install -r requirements.txt
+Install the package in editable mode::
 
-Install the package with Cython extensions::
+    python -m pip install -e .
 
-    pip install -e .
+If your environment has trouble with isolated builds, use::
 
-This builds the Cython extensions in-place. For a fresh build::
-
-    pip install -e . --no-build-isolation
-
-Build the C Executable
-----------------------
-
-For the full EMC reconstruction, build the C executable with CMake::
-
-    mkdir -p build && cd build
-    cmake .. && make
-
-This requires:
-
-* MPI development headers
-* GSL development libraries
-* HDF5 with parallel support
-* OpenMP support
+    python -m pip install -e . --no-build-isolation
 
 Verify Installation
 -------------------
 
-To verify the Python package is installed correctly::
+Check that the package imports::
 
-    python -c "import dragonfly; print(dragonfly.__version__)"
+    python -c "import dragonfly; print(dragonfly.__file__)"
 
-To check MPI is working::
+Check that MPI is available::
 
     mpirun --version
+
+You can also verify that the installed command-line entry points resolve::
+
+    dragonfly.init -h
 
 Uninstall
 ---------
 
-To uninstall the package::
+Uninstall the PyPI or editable install with::
 
-    pip uninstall dragonfly-spi
-
-or from source::
-
-    pip uninstall dragonfly
+    python -m pip uninstall dragonfly-spi
 
 Troubleshooting
 ---------------
 
-**mpi4py installation fails**
+**Build cannot find MPI, HDF5, or GSL**
 
-    Ensure your MPI module is loaded before installing mpi4py::
+    Make sure the corresponding development packages or environment modules are
+    loaded and that ``mpicc``, ``h5cc``, and ``gsl-config`` are on ``PATH``.
+
+**mpi4py installation fails or imports the wrong MPI**
+
+    Reinstall after loading the MPI module you actually intend to use::
 
         module load mpi/openmpi-x.x.x
-        pip install mpi4py
+        python -m pip install --force-reinstall mpi4py dragonfly-spi
 
 **Import errors after installation**
 
     Try reinstalling with a fresh build::
 
-        pip uninstall dragonfly
-        pip install -e . --no-build-isolation
-
-**CMake cannot find HDF5**
-
-    Install HDF5 with parallel support or set HDF5_DIR environment variable.
+        python -m pip uninstall dragonfly-spi
+        python -m pip install -e . --no-build-isolation
 
 **Missing GSL library**
 
