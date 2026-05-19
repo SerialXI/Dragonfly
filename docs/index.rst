@@ -19,17 +19,16 @@ using MPI and OpenMP.
    user-guides/faq
 
 .. toctree::
+   :maxdepth: 1
+   :caption: Background
+
+   background/index
+
+.. toctree::
    :maxdepth: 2
    :caption: API Reference
 
-   api/detector
-   api/emcfile
-   api/model
-   api/quaternion
-   api/iterate
-   api/params
-   api/recon
-   utils
+   api/index
 
 Indices and tables
 ==================

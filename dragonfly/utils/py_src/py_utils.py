@@ -119,7 +119,7 @@ def confirm_oversampling(ratio):
     yes_val = set(['yes', 'y', '', 'yup', 'ya'])
     no_val = set(['no', 'n', 'nope', 'nay', 'not'])
     print('Oversampling ratio = %.2f is a little high. This is inefficient.' % ratio)
-    print('Please see http://www.github.com/duaneloh/Dragonfly/wiki/Oversampling for tips')
+    print('Please see https://dragonfly-spi.readthedocs.io/en/latest/background/oversampling.html for tips')
     sys.stdout.write('Continue anyway? [Y or Return/N]: ')
     while not done:
         choice = input().lower()
