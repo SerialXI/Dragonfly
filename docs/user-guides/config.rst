@@ -119,16 +119,18 @@ Parameters for the EMC reconstruction.
      - Detector geometry file
    * - ``num_div``
      - Quaternion sampling refinement (``10(5n^3 + n)`` rotations)
+   * - ``beta``
+     - Initial annealing value. Use ``auto`` to estimate per-frame starting values automatically.
+   * - ``beta_factor``
+     - Additional multiplicative factor applied to the starting ``beta`` values
+   * - ``beta_schedule``
+     - Increase the effective ``beta`` by multiplying by <first> every <second> iterations
    * - ``output_folder``
      - Directory for output files
    * - ``log_file``
      - Reconstruction log file
    * - ``need_scaling``
      - Fluence scaling (0=off, 1=on)
-   * - ``beta_factor``
-     - Initial deterministic annealing multiplicative factor
-   * - ``beta_schedule``
-     - Increase ``beta_factor`` by <first> every <second> iterations
 
 Configuration Chaining
 ----------------------
