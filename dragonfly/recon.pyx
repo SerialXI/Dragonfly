@@ -160,7 +160,6 @@ cdef class EMCRecon():
 
         factor = itr.par.beta_jump ** ((itr.par.iteration-1) // itr.par.beta_period)
         factor *= itr.par.beta_factor
-        print('beta factor =', factor)
 
         for d in range(itr.tot_num_data):
             if itr.blacklist[d] == 1:
