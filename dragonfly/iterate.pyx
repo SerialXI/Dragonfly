@@ -150,15 +150,20 @@ cdef class Iterate:
             try:
                 fp = open(param.log_fname, 'r')
                 lines = fp.readlines()
-                last_iter = int(lines[len(lines)-1].split()[0])
                 fp.close()
             except FileNotFoundError:
-                print('No log file found to resume reconstruction')
-                raise
-            self.params.start_iter = last_iter + 1
-            model_file = op.join(param.output_folder, 'output_%.3d.h5' % last_iter)
-            scale_file = op.join(param.output_folder, 'output_%.3d.h5' % last_iter)
-            print('Resuming from iteration', self.params.start_iter)
+                print('No log file found to resume reconstruction. Starting from scratch.')
+            else:
+                fields = lines[len(lines)-1].split() if len(lines) > 0 else []
+                try:
+                    last_iter = int(fields[0])
+                except (IndexError, ValueError):
+                    print('No completed iterations found in log file. Starting from scratch and overwriting log file.')
+                else:
+                    self.params.start_iter = last_iter + 1
+                    model_file = op.join(param.output_folder, 'output_%.3d.h5' % last_iter)
+                    scale_file = op.join(param.output_folder, 'output_%.3d.h5' % last_iter)
+                    print('Resuming from iteration', self.params.start_iter)
 
         qmax = max([det.qmax() for det in dets])
         model = Model(self.calculate_size(qmax), self.iter.par.num_modes, rtype)
