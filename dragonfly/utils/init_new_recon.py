@@ -18,6 +18,7 @@ import sys
 
 try:
     from prompt_toolkit.application import Application
+    from prompt_toolkit.application.current import get_app
     from prompt_toolkit.filters import Condition
     from prompt_toolkit.key_binding import KeyBindings
     from prompt_toolkit.formatted_text import FormattedText
@@ -29,6 +30,7 @@ try:
     from prompt_toolkit.completion import PathCompleter
     from prompt_toolkit.layout.dimension import Dimension as D
     from prompt_toolkit.widgets import Box, Button, CheckboxList, Frame, Label, RadioList, TextArea
+    from prompt_toolkit.mouse_events import MouseEventType
     from rich.console import Console
     HAS_INTERACTIVE_TUI = True
 except ImportError:
@@ -103,6 +105,8 @@ PT_APP_STYLE = PTStyle.from_dict({
     'label': '#aeb6bf',
     'input-field': 'bg:#14181d #ffffff',
     'input-field.focused': 'bg:#1f2f45 #ffffff bold',
+    'path-field-locked': 'bg:#2a2114 #f2d8a7',
+    'path-field-edit': 'bg:#17324d #ffffff bold',
     'footer': 'bg:#000000 #d7dce2',
     'footer-key': '#7fd7ff bold',
     'footer-mode-path': 'bg:#243447 #d7ecff bold',
@@ -112,6 +116,10 @@ PT_APP_STYLE = PTStyle.from_dict({
     'footer-error': '#ff8f8f bold',
     'button': 'bg:#343a40 #d7dce2',
     'button.focused': 'bg:#7a828c #ffffff bold',
+    'toggle-active': 'bg:#0f6a3b #ffffff bold',
+    'toggle-active-focused': 'bg:#14924f #ffffff bold',
+    'toggle-inactive': 'bg:#15181d #7f8894',
+    'toggle-inactive-focused': 'bg:#2f3a46 #ffffff bold',
     'dialog.body button': 'bg:#343a40 #d7dce2',
     'dialog.body button.focused': 'bg:#7a828c #ffffff bold',
     'dialog.body button-arrow': 'bg:#343a40 #d7dce2',
@@ -180,24 +188,143 @@ def _ordered_experimental_emc(emc):
             ordered_emc[key] = value
     return ordered_emc
 
+
+class ToggleButton(Button):
+    '''Button with explicit active/inactive styling.''' 
+
+    def __init__(self, text, handler, is_active):
+        self.is_active = is_active
+        super(ToggleButton, self).__init__(text, handler=handler, width=10,
+                                           left_symbol='', right_symbol='')
+        self.window.style = self._get_button_style
+
+    def _get_button_style(self):
+        active = self.is_active()
+        focused = get_app().layout.has_focus(self)
+        if active and focused:
+            return 'class:toggle-active-focused'
+        if active:
+            return 'class:toggle-active'
+        if focused:
+            return 'class:toggle-inactive-focused'
+        return 'class:toggle-inactive'
+
+    def _get_text_fragments(self):
+        text = ('{:^%d}' % self.width).format(self.text)
+
+        def handler(mouse_event):
+            if self.handler is not None and mouse_event.event_type == MouseEventType.MOUSE_UP:
+                self.handler()
+
+        focused = get_app().layout.has_focus(self)
+        if self.is_active():
+            style = 'class:toggle-active-focused' if focused else 'class:toggle-active'
+        else:
+            style = 'class:toggle-inactive-focused' if focused else 'class:toggle-inactive'
+        return [
+            ('[SetCursorPosition]', ''),
+            (style, text, handler),
+        ]
+
 class FullScreenWizard(object):
     '''Full-screen prompt_toolkit wizard for reconstruction setup.'''
 
-    STEPS = {
-        'directory': 'Reconstruction Directory',
-        'config_style': 'Config Style',
-        'workflow': 'Workflow',
-        'sim_model_source': 'Simulation Model Source',
-        'sim_model_value': 'Simulation Model Input',
-        'sim_geometry': 'Detector Geometry',
-        'sim_data': 'Simulated Data',
-        'sim_recon': 'Simulation EMC Settings',
-        'sim_beta': 'Simulation Beta Schedule',
-        'exp_photon_mode': 'Photon Input Mode',
-        'exp_photon_input': 'Photon Input Setup',
-        'exp_detector': 'Experimental Detector and Output',
-        'exp_recon': 'Experimental EMC Settings',
-        'exp_beta': 'Experimental Beta Schedule',
+    WORKFLOW = {
+        'directory': {
+            'title': 'Reconstruction Directory',
+            'help': 'Choose the reconstruction tag, parent folder, and run number for the new directory.',
+            'build': '_build_directory_step',
+            'validate': '_validate_directory_step',
+        },
+        'config_style': {
+            'title': 'Config Style',
+            'help': 'Pick whether the generated config should keep comments or stay minimal.',
+            'build': '_build_config_style_step',
+            'validate': '_validate_config_style_step',
+        },
+        'workflow': {
+            'title': 'Workflow',
+            'help': 'Choose whether to prepare a simulation setup or an experimental EMC setup.',
+            'build': '_build_workflow_step',
+            'validate': '_validate_workflow_step',
+        },
+        'sim_model_source': {
+            'title': 'Simulation Model Source',
+            'help': 'Choose whether the simulation starts from a PDB code or a local PDB file.',
+            'workflow': 'simulation',
+            'build': '_build_sim_model_source_step',
+            'validate': '_validate_sim_model_source_step',
+        },
+        'sim_model_value': {
+            'title': 'Simulation Model Input',
+            'help': 'Provide the PDB code or local structure file that seeds the simulation.',
+            'workflow': 'simulation',
+            'build': '_build_sim_model_value_step',
+            'validate': '_validate_sim_model_value_step',
+        },
+        'sim_geometry': {
+            'title': 'Detector Geometry',
+            'help': 'Enter detector geometry values used to generate simulated data.',
+            'workflow': 'simulation',
+            'build': '_build_sim_geometry_step',
+            'validate': '_validate_sim_geometry_step',
+        },
+        'sim_data': {
+            'title': 'Simulated Data',
+            'help': 'Set the number of simulated patterns and the incident fluence.',
+            'workflow': 'simulation',
+            'build': '_build_sim_data_step',
+            'validate': '_validate_sim_data_step',
+        },
+        'sim_recon': {
+            'title': 'Simulation EMC Settings',
+            'help': 'Choose 3D or 2D reconstruction settings and whether fluence scaling is enabled.',
+            'workflow': 'simulation',
+            'build': '_build_sim_recon_step',
+            'validate': '_validate_sim_recon_step',
+        },
+        'sim_beta': {
+            'title': 'Simulation Beta Schedule',
+            'help': 'Set beta_factor and how beta_schedule updates it over iterations.',
+            'workflow': 'simulation',
+            'build': '_build_sim_beta_step',
+            'validate': '_validate_sim_beta_step',
+        },
+        'exp_photon_mode': {
+            'title': 'Photon Input Mode',
+            'help': 'Choose whether EMC reads one photon file, an existing list, or a generated list.',
+            'workflow': 'experimental',
+            'build': '_build_exp_photon_mode_step',
+            'validate': '_validate_exp_photon_mode_step',
+        },
+        'exp_photon_input': {
+            'title': 'Photon Input Setup',
+            'help': 'Provide the photon input path or select files to include in a generated list.',
+            'workflow': 'experimental',
+            'build': '_build_exp_photon_input_step',
+            'validate': '_validate_exp_photon_input_step',
+        },
+        'exp_detector': {
+            'title': 'Experimental Detector and Output',
+            'help': 'Provide the detector file and choose output and log paths for EMC.',
+            'workflow': 'experimental',
+            'build': '_build_exp_detector_step',
+            'validate': '_validate_exp_detector_step',
+        },
+        'exp_recon': {
+            'title': 'Experimental EMC Settings',
+            'help': 'Choose 3D or 2D reconstruction settings and whether fluence scaling is enabled.',
+            'workflow': 'experimental',
+            'build': '_build_exp_recon_step',
+            'validate': '_validate_exp_recon_step',
+        },
+        'exp_beta': {
+            'title': 'Experimental Beta Schedule',
+            'help': 'Set beta_factor and how beta_schedule updates it over iterations.',
+            'workflow': 'experimental',
+            'build': '_build_exp_beta_step',
+            'validate': '_validate_exp_beta_step',
+        },
     }
 
     # Wizard lifecycle and layout.
@@ -205,8 +332,8 @@ class FullScreenWizard(object):
     def __init__(self, args, parent_dir):
         self.args = args
         self.parent_dir = parent_dir
-        self.status = 'Press Ctrl-C to exit without making any changes.'
-        self.status_style = 'class:footer-hint'
+        self.status = None
+        self.status_style = 'class:footer-info'
         self.cancelled = False
         self.edit_mode = False
         self.current_step = 'directory'
@@ -300,14 +427,20 @@ class FullScreenWizard(object):
         def _path_completion_active():
             return self.edit_mode and self._focused_path_widget() is not None
 
+        def _navigation_active():
+            return not self.edit_mode or self._focused_path_widget() is None
+
         @kb.add('c-c')
         @kb.add('c-q')
         def _(event):
             self.cancelled = True
             event.app.exit(result=None)
 
-        @kb.add('tab', filter=Condition(lambda: not self.edit_mode))
+        @kb.add('tab', filter=Condition(_navigation_active))
         def _(event):
+            if self.edit_mode and self._focused_path_widget() is None:
+                self.edit_mode = False
+                self.application.invalidate()
             event.app.layout.focus_next()
 
         @kb.add('tab', filter=Condition(_path_completion_active))
@@ -318,8 +451,11 @@ class FullScreenWizard(object):
             else:
                 buffer.complete_next()
 
-        @kb.add('s-tab', filter=Condition(lambda: not self.edit_mode))
+        @kb.add('s-tab', filter=Condition(_navigation_active))
         def _(event):
+            if self.edit_mode and self._focused_path_widget() is None:
+                self.edit_mode = False
+                self.application.invalidate()
             event.app.layout.focus_previous()
 
         @kb.add('s-tab', filter=Condition(_path_completion_active))
@@ -351,15 +487,11 @@ class FullScreenWizard(object):
         return kb
 
     def _step_active(self, step_id):
-        workflow = self.state['workflow']
-        if step_id.startswith('sim_'):
-            return workflow == 'simulation'
-        if step_id.startswith('exp_'):
-            return workflow == 'experimental'
-        return True
+        step_workflow = self.WORKFLOW[step_id].get('workflow')
+        return step_workflow is None or step_workflow == self.state['workflow']
 
     def _active_steps(self):
-        return [step for step in self.STEPS if self._step_active(step)]
+        return [step for step in self.WORKFLOW if self._step_active(step)]
 
     def _current_index(self):
         return self._active_steps().index(self.current_step)
@@ -384,6 +516,17 @@ class FullScreenWizard(object):
     def _planned_recon_dir(self):
         return self._planned_recon_dir_for(self.state['tag'], self.state['prefix'], self.state['run_num'])
 
+    def _step_definition(self, step_id=None):
+        if step_id is None:
+            step_id = self.current_step
+        return self.WORKFLOW[step_id]
+
+    def _step_title(self, step_id=None):
+        return self._step_definition(step_id)['title']
+
+    def _step_help(self, step_id=None):
+        return self._step_definition(step_id)['help']
+
     def _set_status(self, message):
         self.status = message
         self.status_style = 'class:footer-info'
@@ -393,6 +536,10 @@ class FullScreenWizard(object):
         self.status = message
         self.status_style = 'class:footer-error'
         self.application.invalidate()
+
+    def _clear_status(self):
+        self.status = None
+        self.status_style = 'class:footer-info'
 
     def _focused_path_widget(self):
         if not hasattr(self, 'application') or self.application is None:
@@ -408,7 +555,9 @@ class FullScreenWizard(object):
                 ('class:footer-mode-edit', ' EDIT MODE '),
                 ('class:footer', '  '),
                 ('class:footer-key', 'Tab'),
-                ('class:footer', ': complete path  '),
+                ('class:footer', ': next completion  '),
+                ('class:footer-key', 'Shift-Tab'),
+                ('class:footer', ': previous completion  '),
                 ('class:footer-key', 'Enter'),
                 ('class:footer', ': leave edit mode'),
             ])
@@ -424,16 +573,16 @@ class FullScreenWizard(object):
         return FormattedText([
             ('class:footer-key', 'Tab/Shift-Tab'),
             ('class:footer', ': move focus  '),
-            ('class:footer-key', 'F8'),
-            ('class:footer', ': back  '),
-            ('class:footer-key', 'F9'),
-            ('class:footer', ': next'),
+            ('class:footer-key', 'Enter'),
+            ('class:footer', ': activate focused control  '),
+            ('class:footer-key', 'Ctrl-C'),
+            ('class:footer', ': exit without changes'),
         ])
 
     def _footer_status_text(self):
-        return FormattedText([
-            (self.status_style, self.status),
-        ])
+        if self.status:
+            return FormattedText([(self.status_style, self.status)])
+        return FormattedText([('class:footer-hint', self._step_help())])
 
     def _update_directory_preview(self):
         if not hasattr(self, 'widgets'):
@@ -539,12 +688,18 @@ class FullScreenWizard(object):
             kwargs['complete_while_typing'] = True
         field = TextArea(**kwargs)
         if path:
+            field.window.style = lambda field=field: self._path_field_style(field)
             field.buffer.read_only = Condition(
                 lambda field=field: not (self.edit_mode and self.application.layout.has_focus(field))
             )
         field.control._path_owner = field if path else None
         field._is_path_field = path
         return field
+
+    def _path_field_style(self, field):
+        if self.edit_mode and self.application.layout.has_focus(field):
+            return 'class:path-field-edit'
+        return 'class:path-field-locked'
 
     def _make_label(self, text):
         return Label(text=text, style='class:label')
@@ -554,22 +709,25 @@ class FullScreenWizard(object):
         radio.current_value = current_value
         return radio
 
+    def _step_frame(self, parts):
+        return Frame(Box(HSplit(parts), padding=1), title=self._step_title())
+
     def _buttons(self, extra=None):
         buttons = []
         if extra is not None:
             buttons.extend(extra)
-        next_text = 'Finish (F9)' if self._next_step() is None else 'Next (F9)'
+        next_text = 'Finish' if self._next_step() is None else 'Next'
         buttons.append(Button(next_text, handler=self._advance, left_symbol='', right_symbol=''))
         if self._previous_step() is not None:
-            buttons.append(Button('Back (F8)', handler=self._go_back, left_symbol='', right_symbol=''))
+            buttons.append(Button('Back', handler=self._go_back, left_symbol='', right_symbol=''))
         return HSplit(buttons, padding=1)
 
     def _go_back(self):
         prev_step = self._previous_step()
         if prev_step is not None:
             self.edit_mode = False
+            self._clear_status()
             self.current_step = prev_step
-            self._set_status('Moved back to %s.' % self.STEPS[self.current_step])
             self._rebuild_ui()
 
     def _clear_workflow_state(self, workflow):
@@ -597,14 +755,14 @@ class FullScreenWizard(object):
         self.directory_preview = preview
         self.current_focus = tag
         self.widgets = {'tag': tag, 'prefix': prefix, 'run_num': run_num}
-        return Frame(Box(HSplit([
+        return self._step_frame([
             self._make_label('Set the reconstruction tag, parent directory, and run number.'),
             self._make_label('Reconstruction tag'), tag,
             self._make_label('Parent directory'), prefix,
             self._make_label('Run number'), run_num,
             preview,
             self._buttons(),
-        ]), padding=1), title=self.STEPS[self.current_step])
+        ])
 
     def _validate_directory_step(self):
         tag = self.widgets['tag'].text.strip()
@@ -640,11 +798,11 @@ class FullScreenWizard(object):
                                  self.state['config_style'])
         self.current_focus = radio
         self.widgets = {'radio': radio}
-        return Frame(Box(HSplit([
+        return self._step_frame([
             Label(text='Choose how much commentary to include in the generated config file.'),
             radio,
             self._buttons(),
-        ]), padding=1), title=self.STEPS[self.current_step])
+        ])
 
     def _validate_config_style_step(self):
         self.state['config_style'] = self.widgets['radio'].current_value
@@ -655,11 +813,11 @@ class FullScreenWizard(object):
                                  self.state['workflow'])
         self.current_focus = radio
         self.widgets = {'radio': radio}
-        return Frame(Box(HSplit([
+        return self._step_frame([
             Label(text='Choose whether to generate a simulation config or an experimental EMC config.'),
             radio,
             self._buttons(),
-        ]), padding=1), title=self.STEPS[self.current_step])
+        ])
 
     def _validate_workflow_step(self):
         workflow = self.widgets['radio'].current_value
@@ -674,11 +832,11 @@ class FullScreenWizard(object):
                                  self.state['sim_model_source'])
         self.current_focus = radio
         self.widgets = {'radio': radio}
-        return Frame(Box(HSplit([
+        return self._step_frame([
             Label(text='Select whether the simulation should start from a PDB code or a local PDB file.'),
             radio,
             self._buttons(),
-        ]), padding=1), title=self.STEPS[self.current_step])
+        ])
 
     def _validate_sim_model_source_step(self):
         self.state['sim_model_source'] = self.widgets['radio'].current_value
@@ -695,12 +853,12 @@ class FullScreenWizard(object):
             label = 'Local PDB file path'
             self.widgets = {'field': field}
             self.current_focus = field
-        return Frame(Box(HSplit([
+        return self._step_frame([
             Label(text='Provide the structure input for the simulation.'),
             Label(text=label),
             field,
             self._buttons(),
-        ]), padding=1), title=self.STEPS[self.current_step])
+        ])
 
     def _validate_sim_model_value_step(self):
         value = self.widgets['field'].text.strip()
@@ -736,7 +894,7 @@ class FullScreenWizard(object):
         }
         self.widgets = widgets
         self.current_focus = widgets['detd']
-        return Frame(Box(HSplit([
+        return self._step_frame([
             Label(text='Enter detector geometry values for the simulation.'),
             Label(text='Detector distance (mm)'), widgets['detd'],
             Label(text='Photon wavelength (Angstrom)'), widgets['lambda'],
@@ -745,7 +903,7 @@ class FullScreenWizard(object):
             Label(text='Beamstop radius (pixels)'), widgets['stoprad'],
             Label(text='Polarization correction'), widgets['polarization'],
             self._buttons(),
-        ]), padding=1), title=self.STEPS[self.current_step])
+        ])
 
     def _validate_float_text(self, value, label, minimum=0):
         try:
@@ -805,12 +963,12 @@ class FullScreenWizard(object):
         fluence = self._make_text(self.state['sim_fluence'])
         self.widgets = {'num_data': num_data, 'fluence': fluence}
         self.current_focus = num_data
-        return Frame(Box(HSplit([
+        return self._step_frame([
             Label(text='Set the number of simulated diffraction patterns and fluence.'),
             Label(text='Number of diffraction patterns'), num_data,
             Label(text='Incident fluence (photons/um^2)'), fluence,
             self._buttons(),
-        ]), padding=1), title=self.STEPS[self.current_step])
+        ])
 
     def _validate_sim_data_step(self):
         num_data = self._validate_int_text(self.widgets['num_data'].text.strip(), 'Number of patterns')
@@ -831,30 +989,22 @@ class FullScreenWizard(object):
             self.state['%s_num_rot' % prefix] = self.widgets['num_rot'].text.strip() or self.state['%s_num_rot' % prefix]
         if 'num_modes' in self.widgets:
             self.state['%s_num_modes' % prefix] = self.widgets['num_modes'].text.strip() or self.state['%s_num_modes' % prefix]
-        self._set_status('Reconstruction type set to %s.' % recon_type)
+        self._clear_status()
         self._rebuild_ui()
-
-    def _recon_button_label(self, current_recon, candidate):
-        if current_recon == candidate:
-            return '%s selected' % candidate.upper()
-        return candidate.upper()
 
     def _build_recon_settings_step(self, prefix):
         scaling = self._make_radio([(True, 'Enable fluence scaling'), (False, 'Disable fluence scaling')],
                                    self.state['%s_need_scaling' % prefix])
         current_recon = self.state['%s_recon_type' % prefix]
-        button_3d = Button(self._recon_button_label(current_recon, '3d'),
-                           handler=lambda: self._switch_recon_type(prefix, '3d'),
-                           left_symbol='', right_symbol='')
-        button_2d = Button(self._recon_button_label(current_recon, '2d'),
-                           handler=lambda: self._switch_recon_type(prefix, '2d'),
-                           left_symbol='', right_symbol='')
+        button_3d = ToggleButton('3D', handler=lambda: self._switch_recon_type(prefix, '3d'),
+                                 is_active=lambda: self.state['%s_recon_type' % prefix] == '3d')
+        button_2d = ToggleButton('2D', handler=lambda: self._switch_recon_type(prefix, '2d'),
+                                 is_active=lambda: self.state['%s_recon_type' % prefix] == '2d')
         widgets = {'scaling': scaling, 'button_3d': button_3d, 'button_2d': button_2d}
         parts = [
             self._make_label('Set reconstruction type and scaling options.'),
             self._make_label('Reconstruction type'),
             VSplit([button_3d, button_2d], padding=1),
-            self._make_label('Current reconstruction type: %s' % current_recon.upper()),
             self._make_label('Fluence scaling'), scaling,
         ]
         if current_recon == '3d':
@@ -872,8 +1022,8 @@ class FullScreenWizard(object):
             ])
         parts.append(self._buttons())
         self.widgets = widgets
-        self.current_focus = button_3d
-        return Frame(Box(HSplit(parts), padding=1), title=self.STEPS[self.current_step])
+        self.current_focus = button_3d if current_recon == '3d' else button_2d
+        return self._step_frame(parts)
 
     def _validate_recon_settings_step(self, prefix):
         new_type = self.state['%s_recon_type' % prefix]
@@ -904,14 +1054,14 @@ class FullScreenWizard(object):
         period = self._make_text(self.state['%s_beta_period' % prefix])
         self.widgets = {'factor': factor, 'jump': jump, 'period': period}
         self.current_focus = factor
-        return Frame(Box(HSplit([
+        return self._step_frame([
             Label(text='beta_start[d] is computed per frame. The iteration factor is'),
             Label(text='beta_factor * beta_schedule[0]**((i-1)//beta_schedule[1]).'),
             Label(text='Initial beta_factor'), factor,
             Label(text='Multiply beta_factor by how much at each change?'), jump,
             Label(text='Change beta_factor every how many iterations?'), period,
             self._buttons(),
-        ]), padding=1), title=self.STEPS[self.current_step])
+        ])
 
     def _validate_beta_step(self, prefix):
         factor = self._validate_float_text(self.widgets['factor'].text.strip(), 'beta_factor')
@@ -938,11 +1088,11 @@ class FullScreenWizard(object):
         ], self.state['exp_photon_mode'])
         self.widgets = {'radio': radio}
         self.current_focus = radio
-        return Frame(Box(HSplit([
+        return self._step_frame([
             Label(text='Choose how photon inputs should be configured.'),
             radio,
             self._buttons(),
-        ]), padding=1), title=self.STEPS[self.current_step])
+        ])
 
     def _validate_exp_photon_mode_step(self):
         self.state['exp_photon_mode'] = self.widgets['radio'].current_value
@@ -969,7 +1119,7 @@ class FullScreenWizard(object):
         self.state['exp_photon_folder'] = folder
         self.state['exp_photon_selected'] = selected
         if announce:
-            self._set_status('Photon file list refreshed for %s.' % folder)
+            self._set_status('Photon file list refreshed.')
             self.application.invalidate()
 
     def _refresh_generated_files(self):
@@ -1010,7 +1160,7 @@ class FullScreenWizard(object):
             ])
         parts.append(self._buttons(extra=extra))
         self.widgets = widgets
-        return Frame(Box(HSplit(parts), padding=1), title=self.STEPS[self.current_step])
+        return self._step_frame(parts)
 
     def _validate_exp_photon_input_step(self):
         mode = self.state['exp_photon_mode']
@@ -1055,13 +1205,13 @@ class FullScreenWizard(object):
         log_file = self._make_text(self.state['exp_log_file'])
         self.widgets = {'detector': detector, 'output_folder': output_folder, 'log_file': log_file}
         self.current_focus = detector
-        return Frame(Box(HSplit([
+        return self._step_frame([
             Label(text='Provide detector and output paths for the experimental setup.'),
             Label(text='Detector file path'), detector,
             Label(text='Output folder'), output_folder,
             Label(text='Log file'), log_file,
             self._buttons(),
-        ]), padding=1), title=self.STEPS[self.current_step])
+        ])
 
     def _validate_exp_detector_step(self):
         detector = self.widgets['detector'].text.strip()
@@ -1091,10 +1241,10 @@ class FullScreenWizard(object):
         return self._validate_beta_step('exp')
 
     def _build_current_container(self):
-        return getattr(self, '_build_%s_step' % self.current_step)()
+        return getattr(self, self._step_definition()['build'])()
 
     def _validate_current_step(self):
-        return getattr(self, '_validate_%s_step' % self.current_step)()
+        return getattr(self, self._step_definition()['validate'])()
 
     def _rebuild_ui(self):
         if self.edit_mode and (self.current_focus is None or not getattr(self.current_focus, '_is_path_field', False)):
@@ -1115,6 +1265,7 @@ class FullScreenWizard(object):
             self.application.exit(result=self.state)
             return
         self.edit_mode = False
+        self._clear_status()
         self.current_step = next_step
         self._rebuild_ui()
 
