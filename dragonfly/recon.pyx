@@ -7,7 +7,7 @@ from mpi4py import MPI
 cimport numpy as np
 cimport openmp
 from libc.stdlib cimport malloc, calloc, free
-from libc.math cimport sqrt
+from libc.math cimport isnan, sqrt
 from .iterate cimport Iterate
 from . cimport recon as c_recon
 from . cimport iterate as c_iterate
@@ -93,7 +93,7 @@ cdef class EMCRecon():
         if itr.par.iteration == 1:
             self.write_log_file_header()
 
-        cdef long vol = itr.mod.vol
+        cdef long vol = itr.mod.num_modes * itr.mod.vol
         MPI.COMM_WORLD.Bcast([<double[:vol]>itr.mod.model1, MPI.DOUBLE], 0)
         beta_mean = self.update_beta()
         likelihood = c_recon.maximize(self.mdata)
@@ -108,6 +108,13 @@ cdef class EMCRecon():
 
         if itr.par.verbosity > 0 and itr.par.rank == 0:
             print('Finished iteration', itr.par.iteration, '(%e)' % itr.rms_change)
+
+        MPI.COMM_WORLD.Bcast([<double[:1]>&itr.rms_change, MPI.DOUBLE], 0)
+        if isnan(itr.rms_change):
+            if itr.par.rank == 0:
+                print('rms_change = NAN')
+            return False
+        return True
 
     def update_model(self):
         '''Update model after iteration.'''
@@ -439,6 +446,7 @@ def main():
         recon.save_initial_model()
     
     for itr.params.iteration in range(st, en):
-        recon.run_iteration()
+        if not recon.run_iteration():
+            break
     if itr.params.verbosity > 0:
         print('Finished all iterations')
