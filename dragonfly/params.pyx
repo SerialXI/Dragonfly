@@ -30,6 +30,7 @@ cdef class EMCParams:
 
         self.par.need_scaling = 0
         self.par.alpha = 0.
+        self.par.data_fraction = 1.
         self.par.beta_factor = -1.
         self.par.radius = 0.
         self.par.num_modes = 1
@@ -99,6 +100,9 @@ cdef class EMCParams:
         self.par.verbosity = config.getint(section_name, 'verbosity', fallback=9)
         self.par.need_scaling = config.getint(section_name, 'need_scaling', fallback=0)
         self.par.alpha = config.getfloat(section_name, 'alpha', fallback=0.)
+        self.par.data_fraction = config.getfloat(section_name, 'data_fraction', fallback=1.)
+        if self.par.data_fraction <= 0. or self.par.data_fraction > 1.:
+            raise ValueError('data_fraction must be > 0 and <= 1')
         self.par.beta_factor = config.getfloat(section_name, 'beta_factor', fallback=1.)
         self.par.radius = config.getfloat(section_name, 'radius', fallback=0.)
         self.par.num_modes = config.getint(section_name, 'num_modes', fallback=1)
@@ -312,6 +316,16 @@ cdef class EMCParams:
     def alpha(self, double val):
         '''Set alpha smoothing factor.'''
         self.par.alpha = val
+    @property
+    def data_fraction(self):
+        '''Fraction of non-blacklisted frames to use per iteration.'''
+        return self.par.data_fraction
+    @data_fraction.setter
+    def data_fraction(self, double val):
+        '''Set stochastic EMC data fraction.'''
+        if val <= 0. or val > 1.:
+            raise ValueError('data_fraction must be > 0 and <= 1')
+        self.par.data_fraction = val
     @property
     def beta_jump(self):
         '''Beta value jump per period.'''

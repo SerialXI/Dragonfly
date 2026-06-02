@@ -11,7 +11,7 @@ cdef extern from "src/params.h" nogil:
         
         # Algorithm parameters
         int beta_period, need_scaling, known_scale, update_scale
-        double alpha, beta_jump, beta_factor
+        double alpha, beta_jump, beta_factor, data_fraction
         #double *beta, *beta_start
         int friedel_sym # Symmetrization for 2D recon
         int axial_sym # N-fold symmetrization about Z-axis
