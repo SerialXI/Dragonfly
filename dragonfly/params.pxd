@@ -10,7 +10,8 @@ cdef extern from "src/params.h" nogil:
         int verbosity
         
         # Algorithm parameters
-        int beta_period, need_scaling, known_scale, update_scale
+        int beta_period, data_fraction_period
+        int need_scaling, known_scale, update_scale
         double alpha, beta_jump, beta_factor, data_fraction
         #double *beta, *beta_start
         int friedel_sym # Symmetrization for 2D recon

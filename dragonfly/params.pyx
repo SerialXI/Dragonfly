@@ -39,6 +39,7 @@ cdef class EMCParams:
 
         self.par.beta_jump = 1.
         self.par.beta_period = 100
+        self.par.data_fraction_period = 1
         self.par.radius_jump = 0.
         self.par.radius_period = 100
 
@@ -103,6 +104,9 @@ cdef class EMCParams:
         self.par.data_fraction = config.getfloat(section_name, 'data_fraction', fallback=1.)
         if self.par.data_fraction <= 0. or self.par.data_fraction > 1.:
             raise ValueError('data_fraction must be > 0 and <= 1')
+        self.par.data_fraction_period = config.getint(section_name, 'data_fraction_period', fallback=1)
+        if self.par.data_fraction_period < 1:
+            raise ValueError('data_fraction_period must be >= 1')
         self.par.beta_factor = config.getfloat(section_name, 'beta_factor', fallback=1.)
         self.par.radius = config.getfloat(section_name, 'radius', fallback=0.)
         self.par.num_modes = config.getint(section_name, 'num_modes', fallback=1)
@@ -179,6 +183,16 @@ cdef class EMCParams:
     def beta_period(self, int val):
         '''Set iterations per beta period.'''
         self.par.beta_period = val
+    @property
+    def data_fraction_period(self):
+        '''Iterations to keep each stochastic data subset.'''
+        return self.par.data_fraction_period
+    @data_fraction_period.setter
+    def data_fraction_period(self, int val):
+        '''Set stochastic data subset period.'''
+        if val < 1:
+            raise ValueError('data_fraction_period must be >= 1')
+        self.par.data_fraction_period = val
     @property
     def need_scaling(self):
         '''Whether frame scaling is enabled.'''
