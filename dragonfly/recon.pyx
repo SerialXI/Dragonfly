@@ -90,11 +90,12 @@ cdef class EMCRecon():
             c_recon.slice_gen = &c_model.slice_gen2d
             c_recon.slice_merge = &c_model.slice_merge2d
 
+        cdef long vol = itr.mod.num_modes * itr.mod.vol
+        MPI.COMM_WORLD.Bcast([<double[:vol]>itr.mod.model1, MPI.DOUBLE], 0)
+        self.iter.update_blacklist()
         if itr.par.iteration == 1:
             self.write_log_file_header()
 
-        cdef long vol = itr.mod.num_modes * itr.mod.vol
-        MPI.COMM_WORLD.Bcast([<double[:vol]>itr.mod.model1, MPI.DOUBLE], 0)
         beta_mean = self.update_beta()
         likelihood = c_recon.maximize(self.mdata)
 
@@ -269,6 +270,8 @@ cdef class EMCRecon():
             f['inter_weight'] = itr.model.inter_weight
             if param.need_scaling != 0:
                 f['scale'] = itr.scale
+            if param.data_fraction < 1.:
+                f['blacklist'] = itr.blacklist
 
             f['quaternions'] = itr.quat.quats
 
