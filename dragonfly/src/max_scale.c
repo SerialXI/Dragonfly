@@ -147,7 +147,6 @@ void update_scale_bg(struct max_data *common) {
 	for (d = 0 ; d < iter->tot_num_data ; ++d) {
 		if (iter->blacklist[d]) {
 			mask[d] = 255 ;
-			iter->scale[d] = -1. ;
 			continue ;
 		}
 		
