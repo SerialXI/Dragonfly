@@ -415,7 +415,7 @@ cdef class Iterate:
         if refresh:
             memcpy(self.iter.blacklist, self.iter.static_blacklist, self.iter.tot_num_data*sizeof(uint8_t))
 
-        if self.iter.par.data_fraction < 1. and refresh and self.iter.par.rank == 0:
+        if self.iter.par.data_fraction < 1. and refresh:
             fail_code = np.zeros(1, dtype='i4')
 
             if self.iter.par.rank == 0:
