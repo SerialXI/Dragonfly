@@ -184,6 +184,8 @@ cdef class Iterate:
         if (self.iter.par.need_scaling == 1 and self.iter.par.data_fraction < 1.
                 and scale_file == ''):
             self.initialize_stochastic_scale()
+        if self.iter.par.data_fraction < 1. and self.iter.par.coverage_bias != 0.:
+            self.initialize_last_selected(scale_file)
         beta_str = config.get(section_name, 'beta', fallback='auto')
         if beta_str == 'auto':
             self.calc_beta()
@@ -225,6 +227,9 @@ cdef class Iterate:
         free(self.iter.fcounts)
         self.iter.fcounts = NULL
         c_iterate.calc_frame_counts(self.iter)
+
+        free(self.iter.last_selected)
+        self.iter.last_selected = NULL
 
         free(self.iter.sum_fact)
         self.iter.sum_fact = NULL
@@ -398,6 +403,67 @@ cdef class Iterate:
         for d in range(self.iter.tot_num_data):
             self.iter.scale[d] = -1.
 
+    def initialize_last_selected(self, fname=''):
+        '''Initialize or load stochastic coverage sampling history.'''
+        cdef int[:] last_view
+        cdef int d
+
+        if self.iter.last_selected != NULL:
+            free(self.iter.last_selected)
+        self.iter.last_selected = <int*> malloc(self.iter.tot_num_data * sizeof(int))
+
+        if op.isfile(fname) and h5py.is_hdf5(fname):
+            with h5py.File(fname, 'r') as f:
+                if 'last_selected' in f:
+                    last = f['last_selected'][:].astype('i4')
+                else:
+                    last = np.full(self.iter.tot_num_data, -1, dtype='i4')
+        else:
+            last = np.full(self.iter.tot_num_data, -1, dtype='i4')
+
+        if last.shape[0] != self.iter.tot_num_data:
+            raise ValueError('Mismatched number of frames in last_selected')
+        last_view = last
+        memcpy(self.iter.last_selected, &last_view[0], self.iter.tot_num_data*sizeof(int))
+
+    def _selection_prob(self, good):
+        '''Calculate per-frame stochastic selection probabilities.'''
+        if self.iter.par.coverage_bias == 0.:
+            return self.iter.par.data_fraction
+
+        if self.iter.last_selected == NULL:
+            self.initialize_last_selected()
+
+        last_selected = np.asarray(<int[:self.iter.tot_num_data]>self.iter.last_selected)
+        max_age = 5. / self.iter.par.data_fraction
+        ages = (self.iter.par.iteration - last_selected[good]).astype('f8')
+        ages[last_selected[good] < 0] = max_age
+        ages = np.minimum(ages, max_age)
+        weights = 1. + self.iter.par.coverage_bias * ages / max_age
+        target = self.iter.par.data_fraction * good.size
+
+        lo, hi = 0., 1.
+        while np.minimum(1., hi * weights).sum() < target:
+            hi *= 2.
+        for _ in range(32):
+            mid = 0.5 * (lo + hi)
+            if np.minimum(1., mid * weights).sum() < target:
+                lo = mid
+            else:
+                hi = mid
+        return np.minimum(1., hi * weights)
+
+    def _update_last_selected(self, uint8_t[:] active_view):
+        '''Update rank-0 coverage sampling history.'''
+        if (self.iter.par.data_fraction >= 1. or self.iter.par.coverage_bias == 0.
+                or self.iter.par.rank != 0):
+            return
+
+        if self.iter.last_selected == NULL:
+            self.initialize_last_selected()
+        last_selected = np.asarray(<int[:self.iter.tot_num_data]>self.iter.last_selected)
+        last_selected[np.asarray(active_view) == 0] = self.iter.par.iteration
+
     def update_blacklist(self):
         '''Update active blacklist for the current iteration.'''
         cdef int d
@@ -425,7 +491,8 @@ cdef class Iterate:
                 if good.size == 0:
                     fail_code[0] = 1
                 else:
-                    selected = np.random.random(good.size) < self.iter.par.data_fraction
+                    prob = self._selection_prob(good)
+                    selected = np.random.random(good.size) < prob
                     if not selected.any():
                         fail_code[0] = 2
                     active[good[~selected]] = 1
@@ -445,6 +512,7 @@ cdef class Iterate:
                 self.iter.scale[d] = 1.
         if self.iter.num_blacklist == self.iter.tot_num_data:
             raise ValueError('All frames are blacklisted')
+        self._update_last_selected(active_view)
 
     def normalize_scale(self):
         '''Normalize scale factors.'''
@@ -506,6 +574,7 @@ cdef class Iterate:
         if self.iter.sum_fact != NULL: free(self.iter.sum_fact)
         if self.iter.blacklist != NULL: free(self.iter.blacklist)
         if self.iter.static_blacklist != NULL: free(self.iter.static_blacklist)
+        if self.iter.last_selected != NULL: free(self.iter.last_selected)
         if self.iter.quat_mapping != NULL: free(self.iter.quat_mapping)
         if self.iter.num_rel_quat != NULL: free(self.iter.num_rel_quat)
         if self.iter.det_mapping != NULL: free(self.iter.det_mapping)
@@ -608,6 +677,10 @@ cdef class Iterate:
     def static_blacklist(self):
         '''Static frame blacklist mask before stochastic sampling.'''
         return np.asarray(<uint8_t[:self.tot_num_data]>self.iter.static_blacklist) if self.iter.static_blacklist != NULL else None
+    @property
+    def last_selected(self):
+        '''Last iteration where each frame was selected for stochastic EMC.'''
+        return np.asarray(<int[:self.tot_num_data]>self.iter.last_selected) if self.iter.last_selected != NULL else None
     @property
     def det_mapping(self):
         '''Mapping from frames to detectors.'''

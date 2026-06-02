@@ -16,6 +16,7 @@ cdef extern from "src/iterate.h" nogil:
         # Parameters for each frame
         int tot_num_data, num_blacklist
         int *fcounts
+        int *last_selected
         double *scale
         double *bgscale
         double *beta

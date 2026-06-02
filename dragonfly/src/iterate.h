@@ -18,6 +18,7 @@ struct iterate {
 	// Parameters for each frame
 	int tot_num_data, num_blacklist ;
 	int *fcounts ;
+	int *last_selected ;
 	double *scale, *bgscale ;
 	double *beta, *beta_start ;
 	double *sum_fact ;
