@@ -181,6 +181,9 @@ cdef class Iterate:
         except configparser.NoOptionError:
             blacklist_file = ''
         self.parse_blacklist(blacklist_file, sel_string)
+        if (self.iter.par.need_scaling == 1 and self.iter.par.data_fraction < 1.
+                and scale_file == ''):
+            self.initialize_stochastic_scale()
         beta_str = config.get(section_name, 'beta', fallback='auto')
         if beta_str == 'auto':
             self.calc_beta()
@@ -384,9 +387,21 @@ cdef class Iterate:
             if self.iter.blacklist[d] != 0:
                 self.iter.num_blacklist += 1
 
+    def initialize_stochastic_scale(self):
+        '''Mark fresh stochastic-EMC scale factors as not yet estimated.'''
+        cdef int d
+        if self.iter.scale == NULL:
+            return
+        if self.iter.static_blacklist == NULL:
+            raise AttributeError('Static blacklist has not been initialized')
+
+        for d in range(self.iter.tot_num_data):
+            self.iter.scale[d] = -1.
+
     def update_blacklist(self):
         '''Update active blacklist for the current iteration.'''
         cdef int d
+        cdef bint refresh
         cdef uint8_t[:] active_view
         cdef uint8_t[:] static_view
 
@@ -395,24 +410,26 @@ cdef class Iterate:
 
         active_view = <uint8_t[:self.iter.tot_num_data]>self.iter.blacklist
         static_view = <uint8_t[:self.iter.tot_num_data]>self.iter.static_blacklist
-        memcpy(self.iter.blacklist, self.iter.static_blacklist, self.iter.tot_num_data*sizeof(uint8_t))
+        refresh = (self.iter.par.data_fraction == 1. or
+                   (self.iter.par.iteration % self.iter.par.data_fraction_period == 0)
+        if refresh:
+            memcpy(self.iter.blacklist, self.iter.static_blacklist, self.iter.tot_num_data*sizeof(uint8_t))
 
-        if self.iter.par.data_fraction < 1. and self.iter.par.rank == 0:
-            active = np.asarray(active_view)
-            static = np.asarray(static_view)
-            good = np.flatnonzero(static == 0)
-            fail_code = np.zeros(1, dtype='i4')
-            if good.size == 0:
-                fail_code[0] = 1
-            else:
-                selected = np.random.random(good.size) < self.iter.par.data_fraction
-                if not selected.any():
-                    fail_code[0] = 2
-                active[good[~selected]] = 1
-        elif self.iter.par.data_fraction < 1.:
+        if self.iter.par.data_fraction < 1. and refresh and self.iter.par.rank == 0:
             fail_code = np.zeros(1, dtype='i4')
 
-        if self.iter.par.data_fraction < 1.:
+            if self.iter.par.rank == 0:
+                active = np.asarray(active_view)
+                static = np.asarray(static_view)
+                good = np.flatnonzero(static == 0)
+                if good.size == 0:
+                    fail_code[0] = 1
+                else:
+                    selected = np.random.random(good.size) < self.iter.par.data_fraction
+                    if not selected.any():
+                        fail_code[0] = 2
+                    active[good[~selected]] = 1
+
             MPI.COMM_WORLD.Bcast([active_view, MPI.BYTE], 0)
             MPI.COMM_WORLD.Bcast([fail_code, MPI.INT], 0)
             if fail_code[0] == 1:
@@ -424,6 +441,8 @@ cdef class Iterate:
         for d in range(self.iter.tot_num_data):
             if self.iter.blacklist[d] != 0:
                 self.iter.num_blacklist += 1
+            elif self.iter.scale != NULL and self.iter.scale[d] < 0.:
+                self.iter.scale[d] = 1.
         if self.iter.num_blacklist == self.iter.tot_num_data:
             raise ValueError('All frames are blacklisted')
 
@@ -445,6 +464,10 @@ cdef class Iterate:
         if blist is None:
             for d in range(self.iter.tot_num_data):
                 self.iter.scale[d] /= mean_scale
+        elif self.iter.par.data_fraction < 1.:
+            for d in range(self.iter.tot_num_data):
+                if self.iter.static_blacklist[d] == 0 and self.iter.scale[d] > 0.:
+                    self.iter.scale[d] /= mean_scale
         else:
             for d in range(self.iter.tot_num_data):
                 if self.iter.blacklist[d] == 0:
