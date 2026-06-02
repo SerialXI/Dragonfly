@@ -272,6 +272,8 @@ cdef class EMCRecon():
                 f['scale'] = itr.scale
             if param.data_fraction < 1.:
                 f['blacklist'] = itr.blacklist
+                if param.coverage_bias != 0.:
+                    f['last_selected'] = itr.last_selected
 
             f['quaternions'] = itr.quat.quats
 
