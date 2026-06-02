@@ -14,7 +14,8 @@ struct params {
 	// Algorithm parameters
 	int beta_period, data_fraction_period ;
 	int need_scaling, known_scale, update_scale ;
-	double alpha, beta_jump, beta_factor, data_fraction ;
+	double alpha, beta_jump, beta_factor ;
+	double data_fraction, coverage_bias ;
 	//double *beta, *beta_start ;
 	int friedel_sym ; // Symmetrization for 2D recon
 	int axial_sym ; // N-fold symmetrization about Z-axis

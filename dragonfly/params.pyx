@@ -31,6 +31,7 @@ cdef class EMCParams:
         self.par.need_scaling = 0
         self.par.alpha = 0.
         self.par.data_fraction = 1.
+        self.par.coverage_bias = 0.
         self.par.beta_factor = -1.
         self.par.radius = 0.
         self.par.num_modes = 1
@@ -107,6 +108,9 @@ cdef class EMCParams:
         self.par.data_fraction_period = config.getint(section_name, 'data_fraction_period', fallback=1)
         if self.par.data_fraction_period < 1:
             raise ValueError('data_fraction_period must be >= 1')
+        self.par.coverage_bias = config.getfloat(section_name, 'coverage_bias', fallback=0.)
+        if self.par.coverage_bias <= -1.:
+            raise ValueError('coverage_bias must be > -1')
         self.par.beta_factor = config.getfloat(section_name, 'beta_factor', fallback=1.)
         self.par.radius = config.getfloat(section_name, 'radius', fallback=0.)
         self.par.num_modes = config.getint(section_name, 'num_modes', fallback=1)
@@ -340,6 +344,16 @@ cdef class EMCParams:
         if val <= 0. or val > 1.:
             raise ValueError('data_fraction must be > 0 and <= 1')
         self.par.data_fraction = val
+    @property
+    def coverage_bias(self):
+        '''Bias stochastic sampling toward long-unused frames.'''
+        return self.par.coverage_bias
+    @coverage_bias.setter
+    def coverage_bias(self, double val):
+        '''Set stochastic coverage bias.'''
+        if val <= -1.:
+            raise ValueError('coverage_bias must be > -1')
+        self.par.coverage_bias = val
     @property
     def beta_jump(self):
         '''Beta value jump per period.'''
