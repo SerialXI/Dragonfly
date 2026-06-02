@@ -411,7 +411,7 @@ cdef class Iterate:
         active_view = <uint8_t[:self.iter.tot_num_data]>self.iter.blacklist
         static_view = <uint8_t[:self.iter.tot_num_data]>self.iter.static_blacklist
         refresh = (self.iter.par.data_fraction == 1. or
-                   (self.iter.par.iteration % self.iter.par.data_fraction_period == 0)
+                   self.iter.par.iteration % self.iter.par.data_fraction_period == 0)
         if refresh:
             memcpy(self.iter.blacklist, self.iter.static_blacklist, self.iter.tot_num_data*sizeof(uint8_t))
 
