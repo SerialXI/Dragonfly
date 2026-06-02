@@ -21,7 +21,7 @@ struct iterate {
 	double *scale, *bgscale ;
 	double *beta, *beta_start ;
 	double *sum_fact ;
-	uint8_t *blacklist ;
+	uint8_t *blacklist, *static_blacklist ;
 
 	// For refinement
 	int *quat_mapping, **rel_quat, *num_rel_quat ;

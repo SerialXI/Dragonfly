@@ -22,6 +22,7 @@ cdef extern from "src/iterate.h" nogil:
         double *beta_start
         double *sum_fact
         uint8_t *blacklist
+        uint8_t *static_blacklist
 
         # For refinement
         int *quat_mapping

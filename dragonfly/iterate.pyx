@@ -4,6 +4,7 @@ import re
 import numpy as np
 import h5py
 import configparser
+from mpi4py import MPI
 from .utils.py_src.read_config import MyConfigParser
 
 from libc.stdlib cimport malloc, calloc, free, atoi
@@ -228,6 +229,9 @@ cdef class Iterate:
 
         free(self.iter.blacklist)
         self.iter.blacklist = <uint8_t*> calloc(self.iter.tot_num_data, sizeof(uint8_t))
+        free(self.iter.static_blacklist)
+        self.iter.static_blacklist = <uint8_t*> calloc(self.iter.tot_num_data, sizeof(uint8_t))
+        self.iter.num_blacklist = 0
 
         if self.iter.par.need_scaling == 1:
             free(self.iter.scale)
@@ -267,6 +271,8 @@ cdef class Iterate:
 
         c_iterate.calc_frame_counts(self.iter)
         self.iter.blacklist = <uint8_t*> calloc(self.iter.tot_num_data, sizeof(uint8_t))
+        self.iter.static_blacklist = <uint8_t*> calloc(self.iter.tot_num_data, sizeof(uint8_t))
+        self.iter.num_blacklist = 0
         c_iterate.calc_sum_fact(self.iter)
         c_iterate.calc_powder(self.iter)
 
@@ -336,32 +342,90 @@ cdef class Iterate:
         cdef int d
         cdef uint8_t curr
         cdef uint8_t[:] arr
-        if self.iter.blacklist == NULL:
+        self.iter.num_blacklist = 0
+        if refresh:
+            if self.iter.blacklist != NULL:
+                free(self.iter.blacklist)
             self.iter.blacklist = <uint8_t*> calloc(self.iter.tot_num_data, sizeof(uint8_t))
-        elif refresh:
-            free(self.iter.blacklist)
-            self.iter.blacklist = <uint8_t*> calloc(self.iter.tot_num_data, sizeof(uint8_t))
+            if self.iter.static_blacklist != NULL:
+                free(self.iter.static_blacklist)
+            self.iter.static_blacklist = <uint8_t*> calloc(self.iter.tot_num_data, sizeof(uint8_t))
+        else:
+            if self.iter.blacklist == NULL:
+                self.iter.blacklist = <uint8_t*> calloc(self.iter.tot_num_data, sizeof(uint8_t))
+            if self.iter.static_blacklist == NULL:
+                self.iter.static_blacklist = <uint8_t*> calloc(self.iter.tot_num_data, sizeof(uint8_t))
 
         if op.isfile(fname):
             arr = np.loadtxt(fname, dtype='u1')
             if arr.shape[0] != self.iter.tot_num_data:
                 raise ValueError('Mismatched number of frames in blacklist file')
-            memcpy(self.iter.blacklist, &arr[0], self.iter.tot_num_data*sizeof(uint8_t))
+            memcpy(self.iter.static_blacklist, &arr[0], self.iter.tot_num_data*sizeof(uint8_t))
 
         if sel_string is None:
-            return
-
-        if sel_string == 'odd_only':
+            pass
+        elif sel_string == 'odd_only':
             curr = 0
+            for d in range(self.iter.tot_num_data):
+                if self.iter.static_blacklist[d] == 0:
+                    self.iter.static_blacklist[d] = curr
+                    curr = 1 - curr
         elif sel_string == 'even_only':
             curr = 1
+            for d in range(self.iter.tot_num_data):
+                if self.iter.static_blacklist[d] == 0:
+                    self.iter.static_blacklist[d] = curr
+                    curr = 1 - curr
         else:
             raise ValueError('Unrecognized sel_string, %s' % sel_string)
 
+        memcpy(self.iter.blacklist, self.iter.static_blacklist, self.iter.tot_num_data*sizeof(uint8_t))
         for d in range(self.iter.tot_num_data):
-            if self.iter.blacklist[d] == 0:
-                self.iter.blacklist[d] = curr
-                curr = 1 - curr
+            if self.iter.blacklist[d] != 0:
+                self.iter.num_blacklist += 1
+
+    def update_blacklist(self):
+        '''Update active blacklist for the current iteration.'''
+        cdef int d
+        cdef uint8_t[:] active_view
+        cdef uint8_t[:] static_view
+
+        if self.iter.blacklist == NULL or self.iter.static_blacklist == NULL:
+            raise AttributeError('Blacklist has not been initialized')
+
+        active_view = <uint8_t[:self.iter.tot_num_data]>self.iter.blacklist
+        static_view = <uint8_t[:self.iter.tot_num_data]>self.iter.static_blacklist
+        memcpy(self.iter.blacklist, self.iter.static_blacklist, self.iter.tot_num_data*sizeof(uint8_t))
+
+        if self.iter.par.data_fraction < 1. and self.iter.par.rank == 0:
+            active = np.asarray(active_view)
+            static = np.asarray(static_view)
+            good = np.flatnonzero(static == 0)
+            fail_code = np.zeros(1, dtype='i4')
+            if good.size == 0:
+                fail_code[0] = 1
+            else:
+                selected = np.random.random(good.size) < self.iter.par.data_fraction
+                if not selected.any():
+                    fail_code[0] = 2
+                active[good[~selected]] = 1
+        elif self.iter.par.data_fraction < 1.:
+            fail_code = np.zeros(1, dtype='i4')
+
+        if self.iter.par.data_fraction < 1.:
+            MPI.COMM_WORLD.Bcast([active_view, MPI.BYTE], 0)
+            MPI.COMM_WORLD.Bcast([fail_code, MPI.INT], 0)
+            if fail_code[0] == 1:
+                raise ValueError('No frames available after applying static blacklist')
+            if fail_code[0] == 2:
+                raise ValueError('No frames selected by data_fraction for this iteration')
+
+        self.iter.num_blacklist = 0
+        for d in range(self.iter.tot_num_data):
+            if self.iter.blacklist[d] != 0:
+                self.iter.num_blacklist += 1
+        if self.iter.num_blacklist == self.iter.tot_num_data:
+            raise ValueError('All frames are blacklisted')
 
     def normalize_scale(self):
         '''Normalize scale factors.'''
@@ -418,6 +482,7 @@ cdef class Iterate:
         if self.iter.beta_start != NULL: free(self.iter.beta_start)
         if self.iter.sum_fact != NULL: free(self.iter.sum_fact)
         if self.iter.blacklist != NULL: free(self.iter.blacklist)
+        if self.iter.static_blacklist != NULL: free(self.iter.static_blacklist)
         if self.iter.quat_mapping != NULL: free(self.iter.quat_mapping)
         if self.iter.num_rel_quat != NULL: free(self.iter.num_rel_quat)
         if self.iter.det_mapping != NULL: free(self.iter.det_mapping)
@@ -516,6 +581,10 @@ cdef class Iterate:
     def blacklist(self):
         '''Frame blacklist mask (1=blacklisted, 0=good).'''
         return np.asarray(<uint8_t[:self.tot_num_data]>self.iter.blacklist) if self.iter.blacklist != NULL else None
+    @property
+    def static_blacklist(self):
+        '''Static frame blacklist mask before stochastic sampling.'''
+        return np.asarray(<uint8_t[:self.tot_num_data]>self.iter.static_blacklist) if self.iter.static_blacklist != NULL else None
     @property
     def det_mapping(self):
         '''Mapping from frames to detectors.'''
