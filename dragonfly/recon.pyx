@@ -7,6 +7,7 @@ from mpi4py import MPI
 cimport numpy as np
 cimport openmp
 from libc.stdlib cimport malloc, calloc, free
+from libc.stdint cimport uint8_t
 from libc.math cimport isnan, sqrt
 from .iterate cimport Iterate
 from . cimport recon as c_recon
@@ -69,6 +70,11 @@ cdef class EMCRecon():
         itr.iter.par.num_proc = MPI.COMM_WORLD.size
         self.mdata.iter = itr.iter
 
+        if itr.iter.par.lazy_data and itr.iter.par.data_fraction < 1.:
+            MPI.COMM_WORLD.Bcast([<uint8_t[:itr.iter.tot_num_data]>itr.iter.blacklist, MPI.BYTE], 0)
+            itr.finalize_blacklist()
+            itr.load_active_data(update_powder=True)
+
     def run_iteration(self, dynamic=False, active_data_loaded=False):
         '''Run a single EMC iteration.
 
@@ -78,6 +84,7 @@ cdef class EMCRecon():
         cdef double likelihood, beta_mean
         cdef double stime = time.time()
         cdef c_iterate.iterate *itr = self.mdata.iter
+        cdef bint refreshed
 
         if itr == NULL:
             print('Set iterate first')
@@ -93,7 +100,10 @@ cdef class EMCRecon():
         cdef long vol = itr.mod.num_modes * itr.mod.vol
         MPI.COMM_WORLD.Bcast([<double[:vol]>itr.mod.model1, MPI.DOUBLE], 0)
         if not active_data_loaded:
-            refreshed = self.iter.update_blacklist()
+            refreshed = self.iter.update_blacklist(finalize=False)
+            if itr.par.data_fraction < 1. and refreshed:
+                MPI.COMM_WORLD.Bcast([<uint8_t[:itr.tot_num_data]>itr.blacklist, MPI.BYTE], 0)
+            self.iter.finalize_blacklist()
             if itr.par.lazy_data and refreshed:
                 self.iter.load_active_data()
         if itr.par.iteration == 1:

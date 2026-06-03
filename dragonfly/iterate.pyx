@@ -4,7 +4,6 @@ import re
 import numpy as np
 import h5py
 import configparser
-from mpi4py import MPI
 from .utils.py_src.read_config import MyConfigParser
 
 from libc.stdlib cimport malloc, calloc, free, atoi
@@ -537,9 +536,8 @@ cdef class Iterate:
         last_selected = np.asarray(<int[:self.iter.tot_num_data]>self.iter.last_selected)
         last_selected[np.asarray(active_view) == 0] = self.iter.par.iteration
 
-    def update_blacklist(self, force=False):
+    def update_blacklist(self, force=False, finalize=True):
         '''Update active blacklist for the current iteration.'''
-        cdef int d
         cdef bint refresh
         cdef uint8_t[:] active_view
         cdef uint8_t[:] static_view
@@ -555,28 +553,25 @@ cdef class Iterate:
             memcpy(self.iter.blacklist, self.iter.static_blacklist, self.iter.tot_num_data*sizeof(uint8_t))
 
         if self.iter.par.data_fraction < 1. and refresh:
-            fail_code = np.zeros(1, dtype='i4')
-
             if self.iter.par.rank == 0:
                 active = np.asarray(active_view)
                 static = np.asarray(static_view)
                 good = np.flatnonzero(static == 0)
-                if good.size == 0:
-                    fail_code[0] = 1
-                else:
+                if good.size > 0:
                     prob = self._selection_prob(good)
                     selected = np.random.random(good.size) < prob
-                    if not selected.any():
-                        fail_code[0] = 2
                     active[good[~selected]] = 1
 
-            MPI.COMM_WORLD.Bcast([active_view, MPI.BYTE], 0)
-            MPI.COMM_WORLD.Bcast([fail_code, MPI.INT], 0)
-            if fail_code[0] == 1:
-                raise ValueError('No frames available after applying static blacklist')
-            if fail_code[0] == 2:
-                raise ValueError('No frames selected by data_fraction for this iteration')
+        if finalize:
+            self.finalize_blacklist()
+        return refresh
 
+    def finalize_blacklist(self):
+        '''Finalize local blacklist-derived counters after any distribution.'''
+        cdef int d
+        cdef uint8_t[:] active_view
+
+        active_view = <uint8_t[:self.iter.tot_num_data]>self.iter.blacklist
         self.iter.num_blacklist = 0
         for d in range(self.iter.tot_num_data):
             if self.iter.blacklist[d] != 0:
@@ -586,7 +581,6 @@ cdef class Iterate:
         if self.iter.num_blacklist == self.iter.tot_num_data:
             raise ValueError('All frames are blacklisted')
         self._update_last_selected(active_view)
-        return refresh
 
     def normalize_scale(self):
         '''Normalize scale factors.'''
