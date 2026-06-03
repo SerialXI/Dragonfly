@@ -18,6 +18,7 @@ double maximize(struct max_data *common_data) {
 
 	gettimeofday(&tm1, NULL) ;
 	common_data->within_openmp = 0 ;
+	free_max_data(common_data) ;
 	
 	allocate_memory(common_data) ;
 	calculate_rescale(common_data) ;
@@ -46,6 +47,7 @@ double maximize(struct max_data *common_data) {
 		combine_information_omp(priv_data, common_data) ;
 		
 		free_max_data(priv_data) ;
+		free(priv_data) ;
 	}
 
 	avg_likelihood = combine_information_mpi(common_data) ;
@@ -138,8 +140,10 @@ void allocate_memory(struct max_data *data) {
 
 void free_max_data(struct max_data *data) {
 	int detn, d ;
+	if (data == NULL || data->iter == NULL)
+		return ;
+
 	struct iterate *iter = data->iter ;
-	struct model *mod = iter->mod ;
 	struct params *param = iter->par ;
 	struct detector *det = iter->det ;
 
@@ -147,43 +151,49 @@ void free_max_data(struct max_data *data) {
 	free(data->info) ;
 	free(data->likelihood) ;
 	free(data->rmax) ;
-	if (mod->num_modes > 1)
-		free(data->quat_norm) ;
-	if (data->prob[0] != NULL)
-	for (d = 0 ; d < iter->tot_num_data ; ++d) {
-		free(data->prob[d]) ;
-		free(data->place_prob[d]) ;
+	free(data->quat_norm) ;
+	if (data->prob != NULL) {
+		for (d = 0 ; d < iter->tot_num_data ; ++d) {
+			free(data->prob[d]) ;
+			if (data->place_prob != NULL)
+				free(data->place_prob[d]) ;
+		}
 	}
 	free(data->prob) ;
 	free(data->place_prob) ;
 	free(data->num_prob) ;
-	if (param->need_scaling && param->update_scale)
-		free(data->psum_d) ;
+	free(data->psum_d) ;
 	
 	if (!data->within_openmp) {
 		free(data->max_exp) ;
+		if (data->u != NULL) {
+			for (detn = 0 ; detn < iter->num_det ; ++detn)
+				free(data->u[detn]) ;
+		}
 		free(data->u) ;
 		free(data->p_norm) ;
 		free(data->offset_prob) ;
 	}
 	else {
-		for (detn = 0 ; detn < iter->num_det ; ++detn)
-			free(data->all_views[detn]) ;
+		if (data->all_views != NULL) {
+			for (detn = 0 ; detn < iter->num_det ; ++detn)
+				free(data->all_views[detn]) ;
+		}
 		free(data->all_views) ;
 		free(data->model) ;
 		free(data->weight) ;
 		free(data->psum_r) ;
 		if (det[0].with_bg && param->need_scaling) {
 			for (detn = 0 ; detn < iter->num_det ; ++detn) {
-				free(data->mask[detn]) ;
-				free(data->G_old[detn]) ;
-				free(data->G_new[detn]) ;
-				free(data->G_mid[detn]) ;
-				free(data->G_latest[detn]) ;
-				free(data->W_old[detn]) ;
-				free(data->W_new[detn]) ;
-				free(data->W_mid[detn]) ;
-				free(data->W_latest[detn]) ;
+				if (data->mask != NULL) free(data->mask[detn]) ;
+				if (data->G_old != NULL) free(data->G_old[detn]) ;
+				if (data->G_new != NULL) free(data->G_new[detn]) ;
+				if (data->G_mid != NULL) free(data->G_mid[detn]) ;
+				if (data->G_latest != NULL) free(data->G_latest[detn]) ;
+				if (data->W_old != NULL) free(data->W_old[detn]) ;
+				if (data->W_new != NULL) free(data->W_new[detn]) ;
+				if (data->W_mid != NULL) free(data->W_mid[detn]) ;
+				if (data->W_latest != NULL) free(data->W_latest[detn]) ;
 			}
 			free(data->mask) ;
 			free(data->G_old) ;
@@ -196,7 +206,33 @@ void free_max_data(struct max_data *data) {
 			free(data->W_latest) ;
 		}
 	}
-	free(data) ;
+
+	data->model = NULL ;
+	data->weight = NULL ;
+	data->all_views = NULL ;
+	data->psum_r = NULL ;
+	data->mask = NULL ;
+	data->G_old = NULL ;
+	data->G_new = NULL ;
+	data->G_mid = NULL ;
+	data->G_latest = NULL ;
+	data->W_old = NULL ;
+	data->W_new = NULL ;
+	data->W_mid = NULL ;
+	data->W_latest = NULL ;
+	data->max_exp_p = NULL ;
+	data->info = NULL ;
+	data->likelihood = NULL ;
+	data->rmax = NULL ;
+	data->quat_norm = NULL ;
+	data->prob = NULL ;
+	data->place_prob = NULL ;
+	data->num_prob = NULL ;
+	data->psum_d = NULL ;
+	data->max_exp = NULL ;
+	data->u = NULL ;
+	data->p_norm = NULL ;
+	data->offset_prob = NULL ;
 }
 
 void print_max_time(char *pre_tag, char *post_tag, int flag) {
