@@ -69,7 +69,7 @@ cdef class EMCRecon():
         itr.iter.par.num_proc = MPI.COMM_WORLD.size
         self.mdata.iter = itr.iter
 
-    def run_iteration(self, dynamic=False):
+    def run_iteration(self, dynamic=False, active_data_loaded=False):
         '''Run a single EMC iteration.
 
         Args:
@@ -92,7 +92,10 @@ cdef class EMCRecon():
 
         cdef long vol = itr.mod.num_modes * itr.mod.vol
         MPI.COMM_WORLD.Bcast([<double[:vol]>itr.mod.model1, MPI.DOUBLE], 0)
-        self.iter.update_blacklist()
+        if not active_data_loaded:
+            refreshed = self.iter.update_blacklist()
+            if itr.par.lazy_data and refreshed:
+                self.iter.load_active_data()
         if itr.par.iteration == 1:
             self.write_log_file_header()
 
@@ -185,6 +188,8 @@ cdef class EMCRecon():
         if self.mdata == NULL or self.mdata.iter == NULL:
             return
         c_recon.free_max_data(self.mdata)
+        free(self.mdata)
+        self.mdata = NULL
 
     def write_log_file_header(self):
         '''Write header to log file.'''
@@ -451,7 +456,8 @@ def main():
         recon.save_initial_model()
     
     for itr.params.iteration in range(st, en):
-        if not recon.run_iteration():
+        active_data_loaded = bool(itr.params.lazy_data and itr.params.iteration == st)
+        if not recon.run_iteration(active_data_loaded=active_data_loaded):
             break
     if itr.params.verbosity > 0:
         print('Finished all iterations')
