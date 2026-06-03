@@ -232,8 +232,20 @@ cdef class EMCRecon():
         '''
         cdef c_iterate.iterate *itr = self.mdata.iter
         cdef c_params.params *param = itr.par
+        cdef double prev_beta
 
-        fp = open((<bytes>param.log_fname).decode(), 'a')
+        log_fname = (<bytes>param.log_fname).decode()
+        if (param.iteration != param.start_iter and
+                (param.iteration - 1) % param.beta_period != 0 and os.path.exists(log_fname)):
+            with open(log_fname, 'r') as fp:
+                lines = fp.readlines()
+                if len(lines) > 0:
+                    fields = lines[len(lines)-1].split()
+                    if len(fields) == 7 and fields[0].isdigit():
+                        prev_beta = float(fields[6])
+                        beta = prev_beta
+
+        fp = open(log_fname, 'a')
         fp.write('%d\t' % param.iteration)
         fp.write('%4.2f\t' % iter_time)
         fp.write('%1.4e\t%f\t%.6e\t%-7d\t%f\n' % (itr.rms_change, itr.mutual_info, likelihood, itr.quat.num_rot, beta))
