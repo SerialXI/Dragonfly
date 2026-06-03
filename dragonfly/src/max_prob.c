@@ -60,6 +60,7 @@ void calculate_rescale(struct max_data *data) {
 		sprintf(res_string + strlen(res_string), " %.6e", iter->rescale[detn]) ;
 	}
 	sprintf(res_string + strlen(res_string), ")") ;
+	free(total) ;
 	print_max_time("rescale", res_string, param->verbosity > 1 && param->rank == 0) ;
 }
 
