@@ -12,6 +12,7 @@ from libc.string cimport memcpy
 cimport numpy as np
 from . cimport iterate as c_iterate
 from . cimport params as c_params
+from . cimport emcfile as c_emcfile
 from .iterate cimport Iterate
 from .detector cimport CDetector, detector
 from .model cimport Model
@@ -88,7 +89,7 @@ cdef class Iterate:
             if ':::' in ph_fname:
                 sname, oname = re.split(':::', ph_fname)
                 ph_fname = config.get(sname, oname)
-            frames = CDataset(op.join(config_folder, ph_fname), dets[0])
+            frames = CDataset(op.join(config_folder, ph_fname), dets[0], lazy=bool(param.lazy_data))
         elif ph_flist is not None:
             if ':::' in ph_flist:
                 sname, oname = re.split(':::', ph_flist)
@@ -98,11 +99,11 @@ cdef class Iterate:
             fnames = [op.join(config_folder, line.strip()) for line in fptr.readlines()]
             fptr.close()
 
-            frames = CDataset(fnames[0], dets[0])
+            frames = CDataset(fnames[0], dets[0], lazy=bool(param.lazy_data))
             if len(dets) > 1:
-                [frames.append(CDataset(op.join(config_folder, fnames[i]), dets[i])) for i in range(1, len(fnames))]
+                [frames.append(CDataset(op.join(config_folder, fnames[i]), dets[i], lazy=bool(param.lazy_data))) for i in range(1, len(fnames))]
             else:
-                [frames.append(CDataset(op.join(config_folder, fnames[i]), dets[0])) for i in range(1, len(fnames))]
+                [frames.append(CDataset(op.join(config_folder, fnames[i]), dets[0], lazy=bool(param.lazy_data))) for i in range(1, len(fnames))]
         else:
             raise ValueError('Need either in_photons_file or in_photons_list.')
 
@@ -126,7 +127,7 @@ cdef class Iterate:
                       'Assuming same background for all detectors')
             for det in dets:
                 det.parse_background(background_file)
-        
+
         self.set_data(frames)
 
         quat = Quaternion()
@@ -166,12 +167,6 @@ cdef class Iterate:
                     scale_file = op.join(param.output_folder, 'output_%.3d.h5' % last_iter)
                     print('Resuming from iteration', self.params.start_iter)
 
-        qmax = max([det.qmax() for det in dets])
-        model = Model(self.calculate_size(qmax), self.iter.par.num_modes, rtype)
-        model_mean = self.mean_count[0] / (self.dets[0].raw_mask==0).sum() * 2.
-        model.allocate(model_file, model_mean, fixed_seed=bool(param.fixed_seed))
-        self.set_model(model)
-
         if self.iter.par.need_scaling == 1:
             self.parse_scale(scale_file)
             self.parse_scale(bgscale_file, bg=True)
@@ -181,16 +176,30 @@ cdef class Iterate:
         except configparser.NoOptionError:
             blacklist_file = ''
         self.parse_blacklist(blacklist_file, sel_string)
+        self.refresh_data_stats()
         if (self.iter.par.need_scaling == 1 and self.iter.par.data_fraction < 1.
                 and scale_file == ''):
             self.initialize_stochastic_scale()
         if self.iter.par.data_fraction < 1. and self.iter.par.coverage_bias != 0.:
             self.initialize_last_selected(scale_file)
-        beta_str = config.get(section_name, 'beta', fallback='auto')
-        if beta_str == 'auto':
-            self.calc_beta()
-        else:
-            self.calc_beta(float(beta_str))
+
+        if self.iter.par.lazy_data:
+            self.params.iteration = self.params.start_iter
+            if not self.load_previous_blacklist(model_file):
+                self.update_blacklist(force=True)
+            self.load_active_data(update_powder=True)
+
+        qmax = max([det.qmax() for det in dets])
+        model = Model(self.calculate_size(qmax), self.iter.par.num_modes, rtype)
+        model_mean = self.mean_count[0] / (self.dets[0].raw_mask==0).sum() * 2.
+        model.allocate(model_file, model_mean, fixed_seed=bool(param.fixed_seed))
+        self.set_model(model)
+
+        if self.iter.par.lazy_data == 0:
+            if self.iter.par.beta_config < 0.:
+                self.calc_beta()
+            else:
+                self.calc_beta(self.iter.par.beta_config)
 
     def set_model(self, Model model):
         '''Set the model.
@@ -224,22 +233,24 @@ cdef class Iterate:
         self.iter.det_mapping = NULL
         self.iter.det_mapping = <int*> calloc(self.iter.num_dfiles, sizeof(int))
 
+        free(self.iter.blacklist)
+        self.iter.blacklist = <uint8_t*> calloc(self.iter.tot_num_data, sizeof(uint8_t))
+        free(self.iter.static_blacklist)
+        self.iter.static_blacklist = <uint8_t*> calloc(self.iter.tot_num_data, sizeof(uint8_t))
+        self.iter.num_blacklist = 0
+
         free(self.iter.fcounts)
         self.iter.fcounts = NULL
-        c_iterate.calc_frame_counts(self.iter)
+        if self.iter.par.lazy_data == 0:
+            c_iterate.calc_frame_counts(self.iter)
 
         free(self.iter.last_selected)
         self.iter.last_selected = NULL
 
         free(self.iter.sum_fact)
         self.iter.sum_fact = NULL
-        c_iterate.calc_sum_fact(self.iter)
-
-        free(self.iter.blacklist)
-        self.iter.blacklist = <uint8_t*> calloc(self.iter.tot_num_data, sizeof(uint8_t))
-        free(self.iter.static_blacklist)
-        self.iter.static_blacklist = <uint8_t*> calloc(self.iter.tot_num_data, sizeof(uint8_t))
-        self.iter.num_blacklist = 0
+        if self.iter.par.lazy_data == 0:
+            c_iterate.calc_sum_fact(self.iter)
 
         if self.iter.par.need_scaling == 1:
             free(self.iter.scale)
@@ -251,9 +262,11 @@ cdef class Iterate:
 
         free(self.iter.beta)
         free(self.iter.beta_start)
-        self.calc_beta()
+        if self.iter.par.lazy_data == 0:
+            self.calc_beta()
 
-        c_iterate.calc_powder(self.iter)
+        if self.iter.par.lazy_data == 0:
+            c_iterate.calc_powder(self.iter)
 
     def set_data(self, CDataset in_dset):
         '''Set the data with a new dataset.
@@ -277,12 +290,21 @@ cdef class Iterate:
 
         self._gen_detlist()
 
-        c_iterate.calc_frame_counts(self.iter)
         self.iter.blacklist = <uint8_t*> calloc(self.iter.tot_num_data, sizeof(uint8_t))
         self.iter.static_blacklist = <uint8_t*> calloc(self.iter.tot_num_data, sizeof(uint8_t))
         self.iter.num_blacklist = 0
-        c_iterate.calc_sum_fact(self.iter)
-        c_iterate.calc_powder(self.iter)
+        if self.iter.par.lazy_data == 0:
+            c_iterate.calc_frame_counts(self.iter)
+            c_iterate.calc_sum_fact(self.iter)
+            c_iterate.calc_powder(self.iter)
+
+    def refresh_data_stats(self, update_powder=True):
+        '''Recalculate eager data statistics after changing the blacklist.'''
+        if self.iter.par.lazy_data == 0:
+            c_iterate.calc_frame_counts(self.iter)
+            c_iterate.calc_sum_fact(self.iter)
+            if update_powder:
+                c_iterate.calc_powder(self.iter)
 
     def set_quat(self, Quaternion quaternion):
         '''Set the quaternion orientations.
@@ -299,6 +321,57 @@ cdef class Iterate:
             param (EMCParams): Parameters object.
         '''
         self.iter.par = param.par
+
+    def load_previous_blacklist(self, fname):
+        '''Load held dynamic blacklist when resuming within a data fraction period.'''
+        cdef uint8_t[:] blist
+        cdef int d
+
+        if (self.iter.par.data_fraction >= 1. or
+                (self.iter.par.iteration - 1) % self.iter.par.data_fraction_period == 0):
+            return False
+        if not (op.isfile(fname) and h5py.is_hdf5(fname)):
+            return False
+
+        with h5py.File(fname, 'r') as f:
+            if 'blacklist' not in f:
+                return False
+            arr = f['blacklist'][:].astype('u1')
+        if arr.shape[0] != self.iter.tot_num_data:
+            raise ValueError('Mismatched number of frames in saved blacklist')
+        blist = arr
+        memcpy(self.iter.blacklist, &blist[0], self.iter.tot_num_data*sizeof(uint8_t))
+        self.iter.num_blacklist = 0
+        for d in range(self.iter.tot_num_data):
+            if self.iter.blacklist[d] != 0:
+                self.iter.num_blacklist += 1
+        return True
+
+    def load_active_data(self, update_powder=False):
+        '''Load currently active sparse binary frames for lazy_data mode.'''
+        cdef dataset *curr = self.iter.dset
+
+        if self.iter.par.lazy_data == 0:
+            return
+        while curr != NULL:
+            if c_emcfile.load_active_frames(curr, self.iter.blacklist) != 0:
+                raise ValueError('Could not load active frames')
+            curr = curr.next
+
+        c_iterate.calc_frame_counts(self.iter)
+        c_iterate.calc_sum_fact(self.iter)
+        if update_powder:
+            c_iterate.calc_powder(self.iter)
+        if self.iter.beta != NULL:
+            free(self.iter.beta)
+            self.iter.beta = NULL
+        if self.iter.beta_start != NULL:
+            free(self.iter.beta_start)
+            self.iter.beta_start = NULL
+        if self.iter.par.beta_config < 0.:
+            self.calc_beta()
+        else:
+            self.calc_beta(self.iter.par.beta_config)
 
     def parse_scale(self, fname, bg=False):
         '''Parse or initialize scale factors.
@@ -464,7 +537,7 @@ cdef class Iterate:
         last_selected = np.asarray(<int[:self.iter.tot_num_data]>self.iter.last_selected)
         last_selected[np.asarray(active_view) == 0] = self.iter.par.iteration
 
-    def update_blacklist(self):
+    def update_blacklist(self, force=False):
         '''Update active blacklist for the current iteration.'''
         cdef int d
         cdef bint refresh
@@ -476,8 +549,8 @@ cdef class Iterate:
 
         active_view = <uint8_t[:self.iter.tot_num_data]>self.iter.blacklist
         static_view = <uint8_t[:self.iter.tot_num_data]>self.iter.static_blacklist
-        refresh = (self.iter.par.data_fraction == 1. or
-                   self.iter.par.iteration % self.iter.par.data_fraction_period == 0)
+        refresh = (force or self.iter.par.data_fraction == 1. or
+                   (self.iter.par.iteration - 1) % self.iter.par.data_fraction_period == 0)
         if refresh:
             memcpy(self.iter.blacklist, self.iter.static_blacklist, self.iter.tot_num_data*sizeof(uint8_t))
 
@@ -513,6 +586,7 @@ cdef class Iterate:
         if self.iter.num_blacklist == self.iter.tot_num_data:
             raise ValueError('All frames are blacklisted')
         self._update_last_selected(active_view)
+        return refresh
 
     def normalize_scale(self):
         '''Normalize scale factors.'''
