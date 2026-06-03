@@ -40,6 +40,7 @@ cdef class EMCParams:
 
         self.par.beta_jump = 1.
         self.par.beta_period = 100
+        self.par.beta_config = -1.
         self.par.data_fraction_period = 1
         self.par.radius_jump = 0.
         self.par.radius_period = 100
@@ -50,6 +51,7 @@ cdef class EMCParams:
         self.par.axial_sym = 1
         self.par.save_prob = 0
         self.par.update_scale = 1
+        self.par.lazy_data = 0
         self.par.refine = 0
         self.par.coarse_div = 0
         self.par.fine_div = 0
@@ -120,6 +122,11 @@ cdef class EMCParams:
         beta_schedule = tuple(config.get(section_name, 'beta_schedule', fallback='1. 100').split())
         self.par.beta_jump = float(beta_schedule[0])
         self.par.beta_period = int(beta_schedule[1])
+        beta_str = config.get(section_name, 'beta', fallback='auto')
+        if beta_str == 'auto':
+            self.par.beta_config = -1.
+        else:
+            self.par.beta_config = float(beta_str)
         radius_schedule= tuple(config.get(section_name, 'radius_schedule', fallback='0. 100').split())
         self.par.radius_jump = float(radius_schedule[0])
         self.par.radius_period = int(radius_schedule[1])
@@ -130,6 +137,7 @@ cdef class EMCParams:
         self.par.axial_sym = config.getint(section_name, 'axial_sym', fallback=1)
         self.par.save_prob = config.getint(section_name, 'save_prob', fallback=0)
         self.par.update_scale = config.getint(section_name, 'update_scale', fallback=1)
+        self.par.lazy_data = config.getint(section_name, 'lazy_data', fallback=0)
         num_divs = config.get(section_name, 'num_div', fallback='0').split()
         if len(num_divs) > 1:
             self.par.refine = 1
@@ -221,6 +229,14 @@ cdef class EMCParams:
     def update_scale(self, int val):
         '''Set update_scale flag.'''
         self.par.update_scale = val
+    @property
+    def lazy_data(self):
+        '''Whether to load active sparse frames on demand.'''
+        return self.par.lazy_data
+    @lazy_data.setter
+    def lazy_data(self, int val):
+        '''Set lazy_data flag.'''
+        self.par.lazy_data = val
     @property
     def save_prob(self):
         '''Whether to save probabilities.'''
@@ -362,6 +378,14 @@ cdef class EMCParams:
     def beta_jump(self, double val):
         '''Set beta jump.'''
         self.par.beta_jump = val
+    @property
+    def beta_config(self):
+        '''Configured beta parameter (-1 means auto).'''
+        return self.par.beta_config
+    @beta_config.setter
+    def beta_config(self, double val):
+        '''Set configured beta parameter (-1 means auto).'''
+        self.par.beta_config = val
     @property
     def beta_factor(self):
         '''Beta scaling factor.'''
