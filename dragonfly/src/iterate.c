@@ -5,6 +5,11 @@ void calc_frame_counts(struct iterate *self) {
 	struct dataset *curr = self->dset ;
 	struct detector *cdet ;
 	int *num_data = calloc(self->num_det, sizeof(int)) ;
+	if (self->blacklist == NULL) {
+		fprintf(stderr, "Need to generate an empty blacklist before calculating frame counts\n") ;
+		free(num_data) ;
+		return ;
+	}
 	
 	if (self->fcounts == NULL)
 		self->fcounts = malloc(self->tot_num_data*sizeof(int)) ;
@@ -23,6 +28,8 @@ void calc_frame_counts(struct iterate *self) {
 		
 		if (curr->ftype == SPARSE) {
 			for (d = 0 ; d < curr->num_data ; ++d) {
+				if (self->blacklist[curr->num_offset + d])
+					continue ;
 				for (t = 0 ; t < curr->ones[d] ; ++t)
 				if (cdet->raw_mask[curr->place_ones[curr->ones_accum[d] + t]] < 1)
 					self->fcounts[curr->num_offset + d]++ ;
@@ -37,6 +44,8 @@ void calc_frame_counts(struct iterate *self) {
 		}
 		else if (curr->ftype == DENSE_INT) {
 			for (d = 0 ; d < curr->num_data ; ++d) {
+				if (self->blacklist[curr->num_offset + d])
+					continue ;
 				for (t = 0 ; t < curr->num_pix ; ++t)
 					self->fcounts[curr->num_offset + d] += curr->int_frames[d*curr->num_pix + t] ;
 				
@@ -46,6 +55,8 @@ void calc_frame_counts(struct iterate *self) {
 		}
 		else if (curr->ftype == DENSE_DOUBLE) {
 			for (d = 0 ; d < curr->num_data ; ++d) {
+				if (self->blacklist[curr->num_offset + d])
+					continue ;
 				for (t = 0 ; t < curr->num_pix ; ++t)
 					self->fcounts[curr->num_offset + d] += curr->frames[d*curr->num_pix + t] ;
 				
@@ -121,6 +132,11 @@ void calc_powder(struct iterate *self) {
 	struct dataset *curr = self->dset ;
 	struct detector *det ;
 	int *nframes = calloc(self->num_det, sizeof(int)) ;
+	if (self->blacklist == NULL) {
+		fprintf(stderr, "Need to generate an empty blacklist before calculating powder\n") ;
+		free(nframes) ;
+		return ;
+	}
 	
 	// Only allocate powder if detector has background
 	if (self->det[0].with_bg) {
@@ -136,6 +152,8 @@ void calc_powder(struct iterate *self) {
 			
 			if (curr->ftype == SPARSE) {
 				for (d = 0 ; d < curr->num_data ; ++d) {
+					if (self->blacklist[curr->num_offset + d])
+						continue ;
 					nframes[detn]++ ;
 					for (t = 0 ; t < curr->ones[d] ; ++t) {
 						pixel = curr->place_ones[curr->ones_accum[d] + t] ;
@@ -151,6 +169,8 @@ void calc_powder(struct iterate *self) {
 			}
 			else if (curr->ftype == DENSE_INT) {
 				for (d = 0 ; d < curr->num_data ; ++d) {
+					if (self->blacklist[curr->num_offset + d])
+						continue ;
 					nframes[detn]++ ;
 					for (t = 0 ; t < curr->num_pix ; ++t)
 						if (det->raw_mask[t] < 1)
@@ -159,6 +179,8 @@ void calc_powder(struct iterate *self) {
 			}
 			else if (curr->ftype == DENSE_DOUBLE) {
 				for (d = 0 ; d < curr->num_data ; ++d) {
+					if (self->blacklist[curr->num_offset + d])
+						continue ;
 					nframes[detn]++ ;
 					for (t = 0 ; t < curr->num_pix ; ++t)
 						if (det->raw_mask[t] < 1)
@@ -177,4 +199,3 @@ void calc_powder(struct iterate *self) {
 	
 	free(nframes) ;
 }
-
