@@ -1,7 +1,14 @@
 #include "emcfile.h"
 
-static int parse_binarydataset(char *fname, struct dataset *self) {
+static void calc_sparse_accum(int num_data, int *counts, long *accum, long *total) {
 	int d ;
+	accum[0] = 0 ;
+	for (d = 1 ; d < num_data ; ++d)
+		accum[d] = accum[d-1] + counts[d-1] ;
+	*total = accum[num_data-1] + counts[num_data-1] ;
+}
+
+static int parse_binarydataset(char *fname, struct dataset *self, int lazy) {
 	struct detector *det = self->det ;
 	
 	FILE *fp = fopen(fname, "rb") ;
@@ -13,21 +20,31 @@ static int parse_binarydataset(char *fname, struct dataset *self) {
 	fread(&(self->ftype), sizeof(int), 1, fp) ;
 	fseek(fp, 1024, SEEK_SET) ;
 	if (self->ftype == SPARSE) {
-		self->ones = malloc(self->num_data * sizeof(int)) ;
-		self->multi = malloc(self->num_data * sizeof(int)) ;
-		fread(self->ones, sizeof(int), self->num_data, fp) ;
-		fread(self->multi, sizeof(int), self->num_data, fp) ;
-		
-		self->ones_accum = malloc(self->num_data * sizeof(long)) ;
-		self->multi_accum = malloc(self->num_data * sizeof(long)) ;
-		self->ones_accum[0] = 0 ;
-		self->multi_accum[0] = 0 ;
-		for (d = 1 ; d < self->num_data ; ++d) {
-			self->ones_accum[d] = self->ones_accum[d-1] + self->ones[d-1] ;
-			self->multi_accum[d] = self->multi_accum[d-1] + self->multi[d-1] ;
+		self->lazy = lazy ;
+		self->ones_file = malloc(self->num_data * sizeof(int)) ;
+		self->multi_file = malloc(self->num_data * sizeof(int)) ;
+		fread(self->ones_file, sizeof(int), self->num_data, fp) ;
+		fread(self->multi_file, sizeof(int), self->num_data, fp) ;
+		self->ones_accum_file = malloc(self->num_data * sizeof(long)) ;
+		self->multi_accum_file = malloc(self->num_data * sizeof(long)) ;
+		calc_sparse_accum(self->num_data, self->ones_file, self->ones_accum_file, &self->ones_total_file) ;
+		calc_sparse_accum(self->num_data, self->multi_file, self->multi_accum_file, &self->multi_total_file) ;
+
+		self->ones = calloc(self->num_data, sizeof(int)) ;
+		self->multi = calloc(self->num_data, sizeof(int)) ;
+		self->ones_accum = calloc(self->num_data, sizeof(long)) ;
+		self->multi_accum = calloc(self->num_data, sizeof(long)) ;
+		if (lazy) {
+			fclose(fp) ;
+			return 0 ;
 		}
-		self->ones_total = self->ones_accum[self->num_data-1] + self->ones[self->num_data-1] ;
-		self->multi_total = self->multi_accum[self->num_data-1] + self->multi[self->num_data-1] ;
+
+		memcpy(self->ones, self->ones_file, self->num_data * sizeof(int)) ;
+		memcpy(self->multi, self->multi_file, self->num_data * sizeof(int)) ;
+		memcpy(self->ones_accum, self->ones_accum_file, self->num_data * sizeof(long)) ;
+		memcpy(self->multi_accum, self->multi_accum_file, self->num_data * sizeof(long)) ;
+		self->ones_total = self->ones_total_file ;
+		self->multi_total = self->multi_total_file ;
 		
 		self->place_ones = malloc(self->ones_total * sizeof(int)) ;
 		self->place_multi = malloc(self->multi_total * sizeof(int)) ;
@@ -37,11 +54,21 @@ static int parse_binarydataset(char *fname, struct dataset *self) {
 		fread(self->count_multi, sizeof(int), self->multi_total, fp) ;
 	}
 	else if (self->ftype == DENSE_INT) {
+		if (lazy) {
+			fprintf(stderr, "lazy_data only supports sparse binary EMC files (%s is dense int)\n", self->fname) ;
+			fclose(fp) ;
+			return 1 ;
+		}
 		fprintf(stderr, "%s is a dense integer emc file\n", self->fname) ;
 		self->int_frames = malloc(self->num_pix * self->num_data * sizeof(int)) ;
 		fread(self->int_frames, sizeof(int), self->num_pix * self->num_data, fp) ;
 	}
 	else if (self->ftype == DENSE_DOUBLE) {
+		if (lazy) {
+			fprintf(stderr, "lazy_data only supports sparse binary EMC files (%s is dense double)\n", self->fname) ;
+			fclose(fp) ;
+			return 1 ;
+		}
 		fprintf(stderr, "%s is a dense double precision emc file\n", self->fname) ;
 		self->frames = malloc(self->num_pix * self->num_data * sizeof(double)) ;
 		fread(self->frames, sizeof(double), self->num_pix * self->num_data, fp) ;
@@ -53,6 +80,78 @@ static int parse_binarydataset(char *fname, struct dataset *self) {
 	}
 	fclose(fp) ;
 
+	return 0 ;
+}
+
+int load_active_frames(struct dataset *self, uint8_t *blacklist) {
+	int d, global_d ;
+	long ones_offset = 0, multi_offset = 0 ;
+	long place_ones_start, place_multi_start, count_multi_start ;
+	FILE *fp ;
+
+	if (!self->lazy)
+		return 0 ;
+	if (self->ftype != SPARSE) {
+		fprintf(stderr, "lazy_data only supports sparse binary EMC files\n") ;
+		return 1 ;
+	}
+
+	if (self->place_ones != NULL) free(self->place_ones) ;
+	if (self->place_multi != NULL) free(self->place_multi) ;
+	if (self->count_multi != NULL) free(self->count_multi) ;
+	self->place_ones = NULL ;
+	self->place_multi = NULL ;
+	self->count_multi = NULL ;
+	self->ones_total = 0 ;
+	self->multi_total = 0 ;
+	memset(self->ones, 0, self->num_data * sizeof(int)) ;
+	memset(self->multi, 0, self->num_data * sizeof(int)) ;
+	memset(self->ones_accum, 0, self->num_data * sizeof(long)) ;
+	memset(self->multi_accum, 0, self->num_data * sizeof(long)) ;
+
+	for (d = 0 ; d < self->num_data ; ++d) {
+		global_d = self->num_offset + d ;
+		if (blacklist[global_d])
+			continue ;
+		self->ones_total += self->ones_file[d] ;
+		self->multi_total += self->multi_file[d] ;
+	}
+	self->place_ones = malloc((self->ones_total > 0 ? self->ones_total : 1) * sizeof(int)) ;
+	self->place_multi = malloc((self->multi_total > 0 ? self->multi_total : 1) * sizeof(int)) ;
+	self->count_multi = malloc((self->multi_total > 0 ? self->multi_total : 1) * sizeof(int)) ;
+
+	fp = fopen(self->fname, "rb") ;
+	if (fp == NULL) {
+		fprintf(stderr, "data_fname %s not found. Exiting.\n", self->fname) ;
+		return 1 ;
+	}
+	place_ones_start = 1024 + 2L * self->num_data * sizeof(int) ;
+	place_multi_start = place_ones_start + self->ones_total_file * sizeof(int) ;
+	count_multi_start = place_multi_start + self->multi_total_file * sizeof(int) ;
+
+	for (d = 0 ; d < self->num_data ; ++d) {
+		global_d = self->num_offset + d ;
+		if (blacklist[global_d])
+			continue ;
+		self->ones[d] = self->ones_file[d] ;
+		self->multi[d] = self->multi_file[d] ;
+		self->ones_accum[d] = ones_offset ;
+		self->multi_accum[d] = multi_offset ;
+
+		if (self->ones[d] > 0) {
+			fseek(fp, place_ones_start + self->ones_accum_file[d] * sizeof(int), SEEK_SET) ;
+			fread(&self->place_ones[ones_offset], sizeof(int), self->ones[d], fp) ;
+		}
+		if (self->multi[d] > 0) {
+			fseek(fp, place_multi_start + self->multi_accum_file[d] * sizeof(int), SEEK_SET) ;
+			fread(&self->place_multi[multi_offset], sizeof(int), self->multi[d], fp) ;
+			fseek(fp, count_multi_start + self->multi_accum_file[d] * sizeof(int), SEEK_SET) ;
+			fread(&self->count_multi[multi_offset], sizeof(int), self->multi[d], fp) ;
+		}
+		ones_offset += self->ones[d] ;
+		multi_offset += self->multi[d] ;
+	}
+	fclose(fp) ;
 	return 0 ;
 }
 
@@ -136,7 +235,7 @@ static int parse_h5dataset(char *fname, struct dataset *self) {
 	return 0 ;
 }
 
-int parse_dataset(char *fname, struct detector *det, struct dataset *self) {
+int parse_dataset(char *fname, struct detector *det, struct dataset *self, int lazy) {
 	int err ;
 	long d, t ;
 	char line[1024], hdfheader[8] = {137, 'H', 'D', 'F', '\r', '\n', 26, '\n'} ;
@@ -154,16 +253,23 @@ int parse_dataset(char *fname, struct detector *det, struct dataset *self) {
 	fclose(fp) ;
 	
 	if (strncmp(line, hdfheader, 8) == 0) {
+		if (lazy) {
+			fprintf(stderr, "lazy_data only supports sparse binary EMC files (%s is HDF5)\n", fname) ;
+			return 1 ;
+		}
 		fprintf(stderr, "Parsing HDF5 dataset %s\n", fname) ;
 		self->ftype = SPARSE ;
 		err = parse_h5dataset(fname, self) ;
 	}
 	else {
-		err = parse_binarydataset(fname, self) ;
+		err = parse_binarydataset(fname, self, lazy) ;
 	}
 	if (err)
 		return err ;
 	
+	if (lazy)
+		return err ;
+
 	// Calculate mean count in the presence of mask
 	self->mean_count = 0. ;
 	for (d = 0 ; d < self->num_data ; ++d) {
@@ -192,4 +298,3 @@ int parse_dataset(char *fname, struct detector *det, struct dataset *self) {
 	
 	return err ;
 }
-
