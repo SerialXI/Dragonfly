@@ -59,7 +59,7 @@ cdef make_data_cdef(config_fname, yes=False, verbose=False):
         det.parse_background(background_fname)
 
     hdf5_output = True
-    if op.splitext(out_fname)[1] == '.emc':
+    if op.splitext(out_fname)[1].decode('utf-8') == '.emc':
         hdf5_output = False
     timer.reset('Ready to generate data', report=verbose)
 
