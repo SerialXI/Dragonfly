@@ -138,6 +138,10 @@ cdef class EMCRecon():
         cdef c_params.params *param = self.mdata.iter.par
         cdef c_quat.quaternion *quat = self.mdata.iter.quat
 
+        for x in range(mod.num_modes * mod.vol):
+            if mod.inter_weight[x] > 0.:
+                mod.model2[x] /= mod.inter_weight[x]
+
         if param.rtype == c_params.RECONRZ or (param.rtype == c_params.RECON2D and param.friedel_sym):
             c_model.symmetrize_friedel2d(mod.model2, mod.inter_weight, mod.num_modes, mod.size)
         elif param.rtype == c_params.RECON3D and quat.icosahedral_flag:
@@ -153,10 +157,6 @@ cdef class EMCRecon():
         if param.axial_sym > 1:
             for x in range(mod.num_modes):
                 c_model.symmetrize_axial(&mod.model2[x*mod.vol], &mod.inter_weight[x*mod.vol], mod.size, param.axial_sym)
-
-        for x in range(mod.num_modes * mod.vol):
-            if mod.inter_weight[x] > 0.:
-                mod.model2[x] /= mod.inter_weight[x]
 
         change = 0
         for x in range(mod.num_modes * mod.vol):
