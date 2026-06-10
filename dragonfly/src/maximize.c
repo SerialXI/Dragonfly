@@ -26,7 +26,7 @@ double maximize(struct max_data *common_data) {
 	#pragma omp parallel default(shared)
 	{
 		int r ;
-		struct max_data *priv_data = malloc(sizeof(struct max_data)) ;
+		struct max_data *priv_data = calloc(1, sizeof(struct max_data)) ;
 		
 		priv_data->within_openmp = 1 ;
 		priv_data->iter = iter ;
@@ -144,6 +144,7 @@ void free_max_data(struct max_data *data) {
 		return ;
 
 	struct iterate *iter = data->iter ;
+	struct model *mod = iter->mod ;
 	struct params *param = iter->par ;
 	struct detector *det = iter->det ;
 
@@ -151,7 +152,8 @@ void free_max_data(struct max_data *data) {
 	free(data->info) ;
 	free(data->likelihood) ;
 	free(data->rmax) ;
-	free(data->quat_norm) ;
+	if (mod->num_modes > 1)
+		free(data->quat_norm) ;
 	if (data->prob != NULL) {
 		for (d = 0 ; d < iter->tot_num_data ; ++d) {
 			free(data->prob[d]) ;
@@ -162,7 +164,8 @@ void free_max_data(struct max_data *data) {
 	free(data->prob) ;
 	free(data->place_prob) ;
 	free(data->num_prob) ;
-	free(data->psum_d) ;
+	if (param->need_scaling && param->update_scale)
+		free(data->psum_d) ;
 	
 	if (!data->within_openmp) {
 		free(data->max_exp) ;
