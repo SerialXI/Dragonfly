@@ -112,7 +112,7 @@ cdef class CDetector:
             for d in range(3):
                 qsq += self.det.qvals[t*3 + d]**2
 
-            if qsq > qmax:
+            if qsq > qmax and self.det.raw_mask[t] < 2:
                 qmax = qsq
         return sqrt(qmax)
 
