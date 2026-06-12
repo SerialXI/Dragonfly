@@ -22,6 +22,16 @@ from libc.stdlib cimport malloc, calloc, free
 from . cimport quaternion as c_quat
 from .quaternion cimport Quaternion
 
+
+def _parse_pair(config, section_name, option, default, cast):
+    '''Parse one or two values from a config option.'''
+    vals = config.get(section_name, option, fallback=default).split()
+    if len(vals) == 1:
+        return cast(vals[0]), cast(vals[0])
+    if len(vals) == 2:
+        return cast(vals[0]), cast(vals[1])
+    raise ValueError('%s must contain one or two values' % option)
+
 cdef class Quaternion:
     '''Class for generating and manipulating orientations for SO(3).
 
@@ -72,7 +82,9 @@ cdef class Quaternion:
             num_rot = config.getint(section_name, 'num_rot')
             friedel_sym = config.getboolean(section_name, 'friedel_sym', fallback=False)
             point_group = '2' if friedel_sym else '1'
-            self.generate_2d(num_rot, point_group)
+            shift_max = _parse_pair(config, section_name, 'shift_max', '0.', float)
+            num_shifts = _parse_pair(config, section_name, 'num_shifts', '1', int)
+            self.generate_2d(num_rot, point_group, shift_max=shift_max, num_shifts=num_shifts)
         elif rtype =='3d':
             num_div = config.get(section_name, 'num_div', fallback='0').split()
             self.generate_3d(int(num_div[0]))
@@ -101,20 +113,40 @@ cdef class Quaternion:
         self.reduced = False
         c_quat.quat_gen(num_div, self.quat)
 
-    def generate_2d(self, int num_rot, point_group):
+    def generate_2d(self, int num_rot, point_group, shift_max=(0., 0.), num_shifts=(1, 1)):
         '''Generate quaternions for in-plane rotations.
 
         Args:
             num_rot (int): Number of rotational samples.
             point_group (str): N-fold rotational symmetry ('1', '2', etc.).
+            shift_max (tuple): Maximum absolute x/y beam-center shifts.
+            num_shifts (tuple): Number of x/y beam-center shifts.
         '''
         if point_group == '':
             point_group = '1'
         max_angle = 2 * np.pi / int(point_group)
 
-        q = np.zeros((num_rot, 5))
-        q[:,0] = np.arange(0, max_angle, max_angle / num_rot)
-        q[:,4] = 1. / num_rot
+        if len(shift_max) != 2 or len(num_shifts) != 2:
+            raise ValueError('shift_max and num_shifts must have two expanded values')
+        shift_max_x, shift_max_y = float(shift_max[0]), float(shift_max[1])
+        num_shift_x, num_shift_y = int(num_shifts[0]), int(num_shifts[1])
+        if shift_max_x < 0. or shift_max_y < 0.:
+            raise ValueError('shift_max must be >= 0')
+        if num_shift_x < 1 or num_shift_y < 1:
+            raise ValueError('num_shifts must be >= 1')
+        if (num_shift_x > 1 and shift_max_x == 0.) or (num_shift_y > 1 and shift_max_y == 0.):
+            raise ValueError('shift_max must be > 0 for dimensions with num_shifts > 1')
+
+        shifts_x = np.array([0.]) if num_shift_x == 1 else np.linspace(-shift_max_x, shift_max_x, num_shift_x)
+        shifts_y = np.array([0.]) if num_shift_y == 1 else np.linspace(-shift_max_y, shift_max_y, num_shift_y)
+        angles = np.arange(num_rot) * max_angle / num_rot
+        angle_grid, shift_x_grid, shift_y_grid = np.meshgrid(
+            angles, shifts_x, shifts_y, indexing='ij')
+        q = np.zeros((angle_grid.size, 5))
+        q[:,0] = angle_grid.ravel()
+        q[:,1] = shift_x_grid.ravel()
+        q[:,2] = shift_y_grid.ravel()
+        q[:,4] = 1. / q.shape[0]
         self.quats = q
 
     def save(self, fname):
