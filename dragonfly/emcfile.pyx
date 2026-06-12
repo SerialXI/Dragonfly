@@ -134,6 +134,10 @@ cdef class CDataset:
         '''Whether this dataset uses lazy active-frame loading.'''
         return bool(self.dset.lazy)
     @property
+    def has_binary_magic(self):
+        '''Whether the binary EMC header contains the EMC magic signature.'''
+        return bool(self.dset.has_binary_magic)
+    @property
     def det(self):
         '''Associated detector object.'''
         if self.dset.det == NULL:
@@ -363,6 +367,7 @@ class EMCReader():
             num_data = np.fromfile(fptr, dtype='i4', count=1)[0]
             pdict['num_pix'] = np.fromfile(fptr, dtype='i4', count=1)[0]
             pdict['frame_type'] = np.fromfile(fptr, dtype='i4', count=1)[0]
+            pdict['has_binary_magic'] = fptr.read(len(EMC_BINARY_MAGIC)) == EMC_BINARY_MAGIC
             fptr.seek(1024, 0)
             ones = np.fromfile(fptr, dtype='i4', count=num_data)
             multi = np.fromfile(fptr, dtype='i4', count=num_data)
@@ -561,12 +566,13 @@ class EMCWriter():
             header = np.zeros((256), dtype='i4')
             header[0] = self.num_data
             header[1] = self.num_pix
-            if header_nums is not None:
-                if len(header_nums) <= 254:
-                    header[2:len(header_nums)+2] = np.array(header_nums).astype('i4')
-                else:
-                    header[2:] = np.array(header_nums).astype('i4')[:254]
+            header[2] = 0  # Sparse data
             header.view('u1')[12:20] = np.frombuffer(EMC_BINARY_MAGIC, dtype='u1')
+            if header_nums is not None:
+                extra = np.array(header_nums).astype('i4')
+                if len(extra) > 0:
+                    num_extra = min(len(extra), 251)
+                    header[5:5+num_extra] = extra[:num_extra]
             header.tofile(fptr)
             ones_arr.astype('i4').tofile(fptr)
             multi_arr.astype('i4').tofile(fptr)
