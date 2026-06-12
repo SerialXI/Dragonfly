@@ -1,5 +1,7 @@
 #include "emcfile.h"
 
+static const unsigned char emc_binary_magic[8] = {137, 'E', 'M', 'C', '\r', '\n', 26, '\n'} ;
+
 static void calc_sparse_accum(int num_data, int *counts, long *accum, long *total) {
 	int d ;
 	accum[0] = 0 ;
@@ -10,6 +12,7 @@ static void calc_sparse_accum(int num_data, int *counts, long *accum, long *tota
 
 static int parse_binarydataset(char *fname, struct dataset *self, int lazy) {
 	struct detector *det = self->det ;
+	unsigned char magic[8] ;
 	
 	FILE *fp = fopen(fname, "rb") ;
 	fread(&(self->num_data), sizeof(int), 1, fp) ;
@@ -18,6 +21,8 @@ static int parse_binarydataset(char *fname, struct dataset *self, int lazy) {
 		fprintf(stderr, "WARNING! The detector file and photons file %s do not "
 		                "have the same number of pixels\n", self->fname) ;
 	fread(&(self->ftype), sizeof(int), 1, fp) ;
+	fread(magic, sizeof(unsigned char), 8, fp) ;
+	self->has_binary_magic = (memcmp(magic, emc_binary_magic, 8) == 0) ;
 	fseek(fp, 1024, SEEK_SET) ;
 	if (self->ftype == SPARSE) {
 		self->lazy = lazy ;
@@ -242,6 +247,7 @@ int parse_dataset(char *fname, struct detector *det, struct dataset *self, int l
 	
 	self->det = det ;
 	self->ones_total = 0, self->multi_total = 0 ;
+	self->has_binary_magic = 0 ;
 	strcpy(self->fname, fname) ;
 	
 	FILE *fp = fopen(fname, "r") ;

@@ -14,6 +14,7 @@ struct dataset {
 	char *fname ;
     enum frame_type ftype ;
 	int num_data, num_pix ;
+	int has_binary_magic ;
 	double mean_count ;
 	struct detector *det ;
 

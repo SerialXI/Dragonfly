@@ -7,6 +7,7 @@ cdef extern from "src/emcfile.h" nogil:
         char *fname
         frame_type ftype
         int num_data, num_pix
+        int has_binary_magic
         double mean_count
         detector *det
 
