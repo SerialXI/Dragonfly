@@ -30,6 +30,10 @@ struct params {
 
 	// Mode information
 	int num_modes, rot_per_mode, nonrot_modes ;
+
+	// 2D beam-center shift search
+	int num_shift_x, num_shift_y ;
+	double shift_max_x, shift_max_y ;
 	
 	// Testing
 	int fixed_seed ;

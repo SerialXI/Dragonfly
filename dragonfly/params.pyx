@@ -37,6 +37,10 @@ cdef class EMCParams:
         self.par.num_modes = 1
         self.par.nonrot_modes = 0
         self.par.rot_per_mode = 0
+        self.par.num_shift_x = 1
+        self.par.num_shift_y = 1
+        self.par.shift_max_x = 0.
+        self.par.shift_max_y = 0.
 
         self.par.beta_jump = 1.
         self.par.beta_period = 100
@@ -118,6 +122,11 @@ cdef class EMCParams:
         self.par.num_modes = config.getint(section_name, 'num_modes', fallback=1)
         self.par.nonrot_modes = config.getint(section_name, 'num_nonrot_modes', fallback=0)
         self.par.rot_per_mode = config.getint(section_name, 'num_rot', fallback=0)
+        self._parse_shift_grid(config, section_name)
+        if self.par.rtype != c_params.RECON2D:
+            if (self.par.num_shift_x != 1 or self.par.num_shift_y != 1 or
+                    self.par.shift_max_x != 0. or self.par.shift_max_y != 0.):
+                raise ValueError('shift_max/num_shifts are only available for 2D reconstructions')
 
         beta_schedule = tuple(config.get(section_name, 'beta_schedule', fallback='1. 100').split())
         self.par.beta_jump = float(beta_schedule[0])
@@ -146,6 +155,38 @@ cdef class EMCParams:
             print('Doing refinement from num_div = %d -> %d\n' % (self.par.coarse_div, self.par.fine_div))
         
         self.par.fixed_seed = config.getint(section_name, 'fixed_seed', fallback=0)
+
+    def _parse_shift_grid(self, config, section_name):
+        '''Parse optional 2D beam-center shift grid parameters.'''
+        max_vals = config.get(section_name, 'shift_max', fallback='0.').split()
+        num_vals = config.get(section_name, 'num_shifts', fallback='1').split()
+        if len(max_vals) == 1:
+            shift_max_x = shift_max_y = float(max_vals[0])
+        elif len(max_vals) == 2:
+            shift_max_x = float(max_vals[0])
+            shift_max_y = float(max_vals[1])
+        else:
+            raise ValueError('shift_max must contain one or two values')
+
+        if len(num_vals) == 1:
+            num_shift_x = num_shift_y = int(num_vals[0])
+        elif len(num_vals) == 2:
+            num_shift_x = int(num_vals[0])
+            num_shift_y = int(num_vals[1])
+        else:
+            raise ValueError('num_shifts must contain one or two values')
+
+        if shift_max_x < 0. or shift_max_y < 0.:
+            raise ValueError('shift_max must be >= 0')
+        if num_shift_x < 1 or num_shift_y < 1:
+            raise ValueError('num_shifts must be >= 1')
+        if (num_shift_x > 1 and shift_max_x == 0.) or (num_shift_y > 1 and shift_max_y == 0.):
+            raise ValueError('shift_max must be > 0 for dimensions with num_shifts > 1')
+
+        self.par.shift_max_x = shift_max_x
+        self.par.shift_max_y = shift_max_y
+        self.par.num_shift_x = num_shift_x
+        self.par.num_shift_y = num_shift_y
 
     @property
     def rank(self):
@@ -325,6 +366,44 @@ cdef class EMCParams:
     def nonrot_modes(self, int val):
         '''Set non-rotating modes.'''
         self.par.nonrot_modes = val
+    @property
+    def num_shifts(self):
+        '''Number of beam-center shifts in x and y for 2D global search.'''
+        return self.par.num_shift_x, self.par.num_shift_y
+    @num_shifts.setter
+    def num_shifts(self, val):
+        '''Set number of x/y shifts from a scalar or two values.'''
+        try:
+            vals = list(val)
+        except TypeError:
+            vals = [val, val]
+        if len(vals) == 1:
+            vals = [vals[0], vals[0]]
+        elif len(vals) != 2:
+            raise ValueError('num_shifts must be a scalar or contain two values')
+        if int(vals[0]) < 1 or int(vals[1]) < 1:
+            raise ValueError('num_shifts must be >= 1')
+        self.par.num_shift_x = int(vals[0])
+        self.par.num_shift_y = int(vals[1])
+    @property
+    def shift_max(self):
+        '''Maximum absolute beam-center x/y shifts in detector pixels.'''
+        return self.par.shift_max_x, self.par.shift_max_y
+    @shift_max.setter
+    def shift_max(self, val):
+        '''Set maximum x/y shifts from a scalar or two values.'''
+        try:
+            vals = list(val)
+        except TypeError:
+            vals = [val, val]
+        if len(vals) == 1:
+            vals = [vals[0], vals[0]]
+        elif len(vals) != 2:
+            raise ValueError('shift_max must be a scalar or contain two values')
+        if float(vals[0]) < 0. or float(vals[1]) < 0.:
+            raise ValueError('shift_max must be >= 0')
+        self.par.shift_max_x = float(vals[0])
+        self.par.shift_max_y = float(vals[1])
 
     @property
     def rtype(self):
