@@ -15,6 +15,8 @@ from libc.stdio cimport FILE, fopen, fclose, fread, fseek
 from libc.stdlib cimport malloc, calloc, free
 from libc.string cimport strcpy, memcpy
 
+EMC_BINARY_MAGIC = b'\x89EMC\r\n\x1a\n'
+
 cdef class CDataset:
     '''Low-level interface to EMC photon data files.
 
@@ -564,6 +566,7 @@ class EMCWriter():
                     header[2:len(header_nums)+2] = np.array(header_nums).astype('i4')
                 else:
                     header[2:] = np.array(header_nums).astype('i4')[:254]
+            header.view('u1')[12:20] = np.frombuffer(EMC_BINARY_MAGIC, dtype='u1')
             header.tofile(fptr)
             ones_arr.astype('i4').tofile(fptr)
             multi_arr.astype('i4').tofile(fptr)
