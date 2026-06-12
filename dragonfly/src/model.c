@@ -60,6 +60,7 @@ void slice_gen3d(double *quaternion, int mode, double *slice, struct detector *d
 
 /* Bi-linear interpolation:
  * Generates slice[t] from a stack of 2D models, model[x] using given angle 
+ * angle[1] and angle[2] represent the x and y shifts respectively
  * The locations of the pixels in slice[t] are given by det->qvals[t]
  * The logartihm of the rescaled slice is generated unless rescale is set to 0.
  */
@@ -67,7 +68,7 @@ void slice_gen2d(double *angle_ptr, int mode, double *slice, struct detector *de
 	long t, i, j, x, y, size = mod->size ;
 	double tx, ty, fx, fy, cx, cy ;
 	double rot_pix[2], rot[2][2] = {{0}} ;
-	double angle = *angle_ptr ;
+	double angle = angle_ptr[0] ;
 	double *model = &mod->model1[mode*mod->vol] ;
 	
 	make_rot_angle(angle, rot) ;
@@ -76,7 +77,7 @@ void slice_gen2d(double *angle_ptr, int mode, double *slice, struct detector *de
 		for (i = 0 ; i < 2 ; ++i) {
 			rot_pix[i] = 0. ;
 			for (j = 0 ; j < 2 ; ++j) 
-				rot_pix[i] += rot[i][j] * det->qvals[t*3 + j] ;
+				rot_pix[i] += rot[i][j] * (det->qvals[t*3 + j] - angle_ptr[j+1]) ;
 			rot_pix[i] += mod->center ;
 		}
 		
@@ -245,6 +246,7 @@ void slice_merge3d(double *quaternion, int mode, double *slice, double *model2, 
 
 /* Bi-linear merging:
  * Merges slice[t] into a stack of 2D models, model[x] using given angle
+ * angle[1] and angle[2] represent the x and y shift respectively
  * Also adds to weight[x] containing the interpolation weights
  * The locations of the pixels in slice[t] are given by det->qvals[t]
  * Only pixels with a mask value < 2 are merged
@@ -253,7 +255,7 @@ void slice_merge2d(double *angle_ptr, int mode, double *slice, double *model2, d
 	long t, i, j, x, y, center = size/2, vol = size*size ;
 	double tx, ty, fx, fy, cx, cy, w, f ;
 	double rot_pix[2], rot[2][2] = {{0}} ;
-	double angle = *angle_ptr ;
+	double angle = angle_ptr[0] ;
 	double *model = &model2[mode*vol] ;
 	double *weight = &inter_weight[mode*vol] ;
 	
@@ -266,7 +268,7 @@ void slice_merge2d(double *angle_ptr, int mode, double *slice, double *model2, d
 		for (i = 0 ; i < 2 ; ++i) {
 			rot_pix[i] = 0. ;
 			for (j = 0 ; j < 2 ; ++j)
-				rot_pix[i] += rot[i][j] * det->qvals[t*3 + j] ;
+				rot_pix[i] += rot[i][j] * (det->qvals[t*3 + j] - angle_ptr[j+1]) ;
 			rot_pix[i] += center ;
 		}
 		
