@@ -234,8 +234,10 @@ double gen_and_save_dataset(long num_data, double mean_count, long do_gamma,
 
 	if (h5_output == 0) {
 		int d, header[256] = {0} ;
+		unsigned char emc_magic[8] = {137, 'E', 'M', 'C', '\r', '\n', 26, '\n'} ;
 		header[0] = num_data ;
 		header[1] = det->num_pix ;
+		memcpy((char*) header + 12, emc_magic, 8) ;
 		
 		FILE *fp = fopen(output_fname, "wb") ;
 		fwrite(header, sizeof(int), 256, fp) ;
