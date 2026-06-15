@@ -28,9 +28,9 @@ void slice_gen3d(double *quaternion, int mode, double *slice, struct detector *d
 		ty = rot_pix[1] ;
 		tz = rot_pix[2] ;
 		
-		x = tx ;
-		y = ty ;
-		z = tz ;
+		x = floor(tx) ;
+		y = floor(ty) ;
+		z = floor(tz) ;
 		
 		if (x < 0 || x > size-2 || y < 0 || y > size-2 || z < 0 || z > size-2) {
 			slice[t] = DBL_MIN ;
@@ -84,8 +84,8 @@ void slice_gen2d(double *angle_ptr, int mode, double *slice, struct detector *de
 		tx = rot_pix[0] ;
 		ty = rot_pix[1] ;
 		
-		x = tx ;
-		y = ty ;
+		x = floor(tx) ;
+		y = floor(ty) ;
 		
 		if (x < 0 || x > size-2 || y < 0 || y > size-2) {
 			slice[t] = DBL_MIN ;
@@ -137,8 +137,8 @@ void slice_genrz(double *phibeta, int mode, double *slice, struct detector *det,
 		tx = mod->center * (1. + sqrt(q_beta[0]*q_beta[0] + q_beta[2]*q_beta[2])) ;
 		ty = mod->center * (1. + q_beta[1]) ;
 		
-		x = tx ;
-		y = ty ;
+		x = floor(tx) ;
+		y = floor(ty) ;
 		
 		if (x < 0 || x > size-2 || y < 0 || y > size-2) {
 			slice[t] = DBL_MIN ;
@@ -193,9 +193,9 @@ void slice_merge3d(double *quaternion, int mode, double *slice, double *model2, 
 		ty = rot_pix[1] ;
 		tz = rot_pix[2] ;
 		
-		x = tx ;
-		y = ty ;
-		z = tz ;
+		x = floor(tx) ;
+		y = floor(ty) ;
+		z = floor(tz) ;
 		
 		if (x < 0 || x > size-2 || y < 0 || y > size-2 || z < 0 || z > size-2)
 			continue ;
@@ -275,8 +275,8 @@ void slice_merge2d(double *angle_ptr, int mode, double *slice, double *model2, d
 		tx = rot_pix[0] ;
 		ty = rot_pix[1] ;
 		
-		x = tx ;
-		y = ty ;
+		x = floor(tx) ;
+		y = floor(ty) ;
 		
 		if (x < 0 || x > size-2 || y < 0 || y > size-2)
 			continue ;
@@ -339,8 +339,8 @@ void slice_mergerz(double *phibeta, int mode, double *slice, double *model2, dou
 		tx = center * (1. + sqrt(q_beta[0]*q_beta[0] + q_beta[2]*q_beta[2])) ;
 		ty = center * (1. + q_beta[1]) ;
 		
-		x = tx ;
-		y = ty ;
+		x = floor(tx) ;
+		y = floor(ty) ;
 		
 		if (x < 0 || x > size-2 || y < 0 || y > size-2)
 			continue ;
