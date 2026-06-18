@@ -46,6 +46,7 @@ cdef class EMCParams:
         self.par.beta_period = 100
         self.par.beta_config = -1.
         self.par.data_fraction_period = 1
+        self.par.data_fraction_until = 0
         self.par.radius_jump = 0.
         self.par.radius_period = 100
 
@@ -114,6 +115,9 @@ cdef class EMCParams:
         self.par.data_fraction_period = config.getint(section_name, 'data_fraction_period', fallback=1)
         if self.par.data_fraction_period < 1:
             raise ValueError('data_fraction_period must be >= 1')
+        self.par.data_fraction_until = config.getint(section_name, 'data_fraction_until', fallback=0)
+        if self.par.data_fraction_until < 0:
+            raise ValueError('data_fraction_until must be >= 0')
         self.par.coverage_bias = config.getfloat(section_name, 'coverage_bias', fallback=0.)
         if self.par.coverage_bias <= -1.:
             raise ValueError('coverage_bias must be > -1')
@@ -246,6 +250,16 @@ cdef class EMCParams:
         if val < 1:
             raise ValueError('data_fraction_period must be >= 1')
         self.par.data_fraction_period = val
+    @property
+    def data_fraction_until(self):
+        '''Last iteration to use stochastic data subsets (0 means no cutoff).'''
+        return self.par.data_fraction_until
+    @data_fraction_until.setter
+    def data_fraction_until(self, int val):
+        '''Set last stochastic data-subset iteration.'''
+        if val < 0:
+            raise ValueError('data_fraction_until must be >= 0')
+        self.par.data_fraction_until = val
     @property
     def need_scaling(self):
         '''Whether frame scaling is enabled.'''

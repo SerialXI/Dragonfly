@@ -12,7 +12,7 @@ struct params {
 	int verbosity ;
 	
 	// Algorithm parameters
-	int beta_period, data_fraction_period ;
+	int beta_period, data_fraction_period, data_fraction_until ;
 	int need_scaling, known_scale, update_scale, lazy_data ;
 	double alpha, beta_jump, beta_factor, beta_config ;
 	double data_fraction, coverage_bias ;
