@@ -326,7 +326,7 @@ cdef class Iterate:
         cdef uint8_t[:] blist
         cdef int d
 
-        if (self.iter.par.data_fraction >= 1. or
+        if (not self.stochastic_active() or
                 (self.iter.par.iteration - 1) % self.iter.par.data_fraction_period == 0):
             return False
         if not (op.isfile(fname) and h5py.is_hdf5(fname)):
@@ -525,9 +525,15 @@ cdef class Iterate:
                 hi = mid
         return np.minimum(1., hi * weights)
 
+    def stochastic_active(self):
+        '''Whether stochastic frame subsets are active for the current iteration.'''
+        return (self.iter.par.data_fraction < 1. and
+                (self.iter.par.data_fraction_until <= 0 or
+                 self.iter.par.iteration <= self.iter.par.data_fraction_until))
+
     def _update_last_selected(self, uint8_t[:] active_view):
         '''Update rank-0 coverage sampling history.'''
-        if (self.iter.par.data_fraction >= 1. or self.iter.par.coverage_bias == 0.
+        if (not self.stochastic_active() or self.iter.par.coverage_bias == 0.
                 or self.iter.par.rank != 0):
             return
 
@@ -539,6 +545,7 @@ cdef class Iterate:
     def update_blacklist(self, force=False, finalize=True):
         '''Update active blacklist for the current iteration.'''
         cdef bint refresh
+        cdef bint stochastic
         cdef uint8_t[:] active_view
         cdef uint8_t[:] static_view
 
@@ -547,12 +554,13 @@ cdef class Iterate:
 
         active_view = <uint8_t[:self.iter.tot_num_data]>self.iter.blacklist
         static_view = <uint8_t[:self.iter.tot_num_data]>self.iter.static_blacklist
-        refresh = (force or self.iter.par.data_fraction == 1. or
+        stochastic = self.stochastic_active()
+        refresh = (force or not stochastic or
                    (self.iter.par.iteration - 1) % self.iter.par.data_fraction_period == 0)
         if refresh:
             memcpy(self.iter.blacklist, self.iter.static_blacklist, self.iter.tot_num_data*sizeof(uint8_t))
 
-        if self.iter.par.data_fraction < 1. and refresh:
+        if stochastic and refresh:
             if self.iter.par.rank == 0:
                 active = np.asarray(active_view)
                 static = np.asarray(static_view)
