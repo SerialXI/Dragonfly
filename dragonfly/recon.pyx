@@ -70,7 +70,7 @@ cdef class EMCRecon():
         itr.iter.par.num_proc = MPI.COMM_WORLD.size
         self.mdata.iter = itr.iter
 
-        if itr.iter.par.lazy_data and itr.iter.par.data_fraction < 1.:
+        if itr.iter.par.lazy_data and itr.stochastic_active():
             MPI.COMM_WORLD.Bcast([<uint8_t[:itr.iter.tot_num_data]>itr.iter.blacklist, MPI.BYTE], 0)
             itr.finalize_blacklist()
             itr.load_active_data(update_powder=True)
@@ -101,7 +101,7 @@ cdef class EMCRecon():
         MPI.COMM_WORLD.Bcast([<double[:vol]>itr.mod.model1, MPI.DOUBLE], 0)
         if not active_data_loaded:
             refreshed = self.iter.update_blacklist(finalize=False)
-            if itr.par.data_fraction < 1. and refreshed:
+            if self.iter.stochastic_active() and refreshed:
                 MPI.COMM_WORLD.Bcast([<uint8_t[:itr.tot_num_data]>itr.blacklist, MPI.BYTE], 0)
             self.iter.finalize_blacklist()
             if itr.par.lazy_data and refreshed:
@@ -297,7 +297,7 @@ cdef class EMCRecon():
             f['inter_weight'] = itr.model.inter_weight
             if param.need_scaling != 0:
                 f['scale'] = itr.scale
-            if param.data_fraction < 1.:
+            if itr.stochastic_active():
                 f['blacklist'] = itr.blacklist
                 if param.coverage_bias != 0.:
                     f['last_selected'] = itr.last_selected
