@@ -61,6 +61,12 @@ The window is split into three panels:
     White dashed lines mark changes in ``beta`` (annealing schedule).
     Orange dashed lines mark changes in the number of rotation samples.
 
+    Use **Analysis > Frame Metrics Plot** for frame-wise scatter plots, 2D
+    histograms, or hexbins from the current HDF5 output file. Available metrics
+    include frame index, ``likelihood``, ``mutual_info``, ``scale`` when present,
+    ``orientation``, ``mode`` for multi-mode runs, ``blacklist``, and per-mode
+    ``occupancy_*`` columns when occupancies are saved.
+
 **Options panel** (right)
     Controls for log file path, volume file path, color scale range, exponent
     (gamma), iteration/layer/mode sliders, and action buttons.
@@ -134,4 +140,6 @@ Menu Reference
   Click class thumbnails to mark good classes, then save a blacklist that flags
   frames not belonging to the selected classes.
 - **Open CLPCA** -- Launch the Common-Line PCA analysis window.
+- **Frame Metrics Plot** -- Launch a pop-out window for frame-wise scatter plots,
+  2D histograms, or hexbins from the selected HDF5 output file.
 - **2D Class Phaser** (2D only) -- Launch 2D phasing of class averages.
