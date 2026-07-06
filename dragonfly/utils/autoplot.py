@@ -252,7 +252,8 @@ class Viewer2D(QtWidgets.QMainWindow):
 
     def _format_intens_coord(self, ax, x, y):
         radius = np.sqrt(x*x + y*y)
-        return 'x={} y={} r={}'.format(ax.format_xdata(x), ax.format_ydata(y), radius)
+        return 'x={} y={} r={}'.format(ax.format_xdata(x), ax.format_ydata(y),
+                                       ax.format_xdata(radius))
 
     def closeEvent(self, event):
         self.parent.settings.setValue('viewer2d/filter_size', self.filt_size.text())
