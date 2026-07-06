@@ -235,7 +235,8 @@ class Viewer2D(QtWidgets.QMainWindow):
             i.remove()
         image = ax.imshow(plot_intens, extent=[-cen-0.5, cen+0.5, cen+0.5, -cen-0.5], norm=norm, cmap=cmap)
         image.set_mouseover(True)
-        ax.format_coord = lambda x, y: self._format_intens_coord(ax, x, y)
+        base_format_coord = ax.format_coord
+        ax.format_coord = lambda x, y: self._format_intens_coord(base_format_coord, x, y)
         ax.set_facecolor('dimgray')
 
         try:
@@ -250,10 +251,22 @@ class Viewer2D(QtWidgets.QMainWindow):
 
         self.canvas.draw()
 
-    def _format_intens_coord(self, ax, x, y):
+    def _format_intens_coord(self, base_format_coord, x, y):
+        coord = base_format_coord(x, y)
         radius = np.sqrt(x*x + y*y)
-        return 'x={} y={} r={}'.format(ax.format_xdata(x), ax.format_ydata(y),
-                                       ax.format_xdata(radius))
+        return '%s r=%s' % (coord, self._format_radius(radius, coord))
+
+    def _format_radius(self, radius, coord):
+        decimals = 0
+        for token in coord.replace(',', ' ').split():
+            if token.startswith(('x=', 'y=')):
+                value = token.split('=', 1)[1]
+                mantissa = value.lower().split('e', 1)[0]
+                if '.' in mantissa:
+                    decimals = max(decimals, len(mantissa.rsplit('.', 1)[1]))
+        if decimals == 0:
+            return '%.0f' % radius
+        return ('%%.%df' % decimals % radius).rstrip('0').rstrip('.')
 
     def closeEvent(self, event):
         self.parent.settings.setValue('viewer2d/filter_size', self.filt_size.text())
