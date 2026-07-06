@@ -8,7 +8,15 @@ void calculate_rescale(struct max_data *data) {
 	struct quaternion *quat = iter->quat ;
 	struct params *param = iter->par ;
 	double *total = calloc(iter->num_det, sizeof(double)) ;
-	char res_string[1024] = {'\0'}  ;
+	int print_rescale = param->verbosity > 1 && param->rank == 0 ;
+	size_t res_len = 0, res_cap = 0 ;
+	char *res_string = NULL ;
+	if (print_rescale) {
+		res_cap = 4 + 32 * iter->num_det ;
+		res_string = malloc(res_cap) ;
+		if (res_string != NULL)
+			res_len = snprintf(res_string, res_cap, "(=") ;
+	}
 	
 	// Calculate rescale factor by calculating mean model value over detector
 	#pragma omp parallel default(shared)
@@ -54,14 +62,16 @@ void calculate_rescale(struct max_data *data) {
 	
 	MPI_Allreduce(MPI_IN_PLACE, total, iter->num_det, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD) ;
 	
-	sprintf(res_string, "(=") ;
 	for (detn = 0 ; detn < iter->num_det ; ++detn) {
 		iter->rescale[detn] = iter->mean_count[detn] / total[detn] * mod->num_modes ;
-		sprintf(res_string + strlen(res_string), " %.6e", iter->rescale[detn]) ;
+		if (res_string != NULL && res_len < res_cap)
+			res_len += snprintf(res_string + res_len, res_cap - res_len, " %.6e", iter->rescale[detn]) ;
 	}
-	sprintf(res_string + strlen(res_string), ")") ;
+	if (res_string != NULL && res_len < res_cap)
+		snprintf(res_string + res_len, res_cap - res_len, ")") ;
 	free(total) ;
-	print_max_time("rescale", res_string, param->verbosity > 1 && param->rank == 0) ;
+	print_max_time("rescale", res_string != NULL ? res_string : "", print_rescale) ;
+	free(res_string) ;
 }
 
 void calculate_prob(int r, struct max_data *priv, struct max_data *common) {
