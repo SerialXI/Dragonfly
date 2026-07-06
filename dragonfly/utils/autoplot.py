@@ -612,15 +612,15 @@ class ProgressViewer(QtWidgets.QMainWindow):
         self._read_config(config)
         self._cid = None
         self._dragid = None
-        self._init_ui()
-        if model is not None:
-            self._parse_and_plot(rots=False)
-        self.old_fname = self.fname.text()
         self.fviewer = None
         self.clpca = None
         self.phaser2d = None
         self.viewer2d = None
         self.metric_viewer = None
+        self._init_ui()
+        if model is not None:
+            self._parse_and_plot(rots=False)
+        self.old_fname = self.fname.text()
 
     def _init_ui(self):
         with open(os.path.join(os.path.dirname(os.path.realpath(__file__)), 'py_src/style.css'), 'r') as f:
