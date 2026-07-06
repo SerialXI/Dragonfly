@@ -225,7 +225,7 @@ class Viewer2D(QtWidgets.QMainWindow):
         size = self.curr_intens.shape[-1]
         cen = size // 2
         plot_intens = self.curr_intens.copy()
-        plot_intens[plot_intens<0] = np.nan
+        #plot_intens[plot_intens<0] = np.nan
 
         try:
             ax = self.fig.get_axes()[0]
@@ -233,7 +233,9 @@ class Viewer2D(QtWidgets.QMainWindow):
             ax = self.fig.add_subplot(121)
         for i in ax.images:
             i.remove()
-        ax.imshow(plot_intens, extent=[-cen-0.5, cen+0.5, cen+0.5, -cen-0.5], norm=norm, cmap=cmap)
+        image = ax.imshow(plot_intens, extent=[-cen-0.5, cen+0.5, cen+0.5, -cen-0.5], norm=norm, cmap=cmap)
+        image.set_mouseover(True)
+        ax.format_coord = lambda x, y: self._format_intens_coord(ax, x, y)
         ax.set_facecolor('dimgray')
 
         try:
@@ -247,6 +249,10 @@ class Viewer2D(QtWidgets.QMainWindow):
         ax.plot(ndimage.uniform_filter(self.curr_occ, filt_size)*100)
 
         self.canvas.draw()
+
+    def _format_intens_coord(self, ax, x, y):
+        radius = np.sqrt(x*x + y*y)
+        return 'x={} y={} r={}'.format(ax.format_xdata(x), ax.format_ydata(y), radius)
 
     def closeEvent(self, event):
         self.parent.settings.setValue('viewer2d/filter_size', self.filt_size.text())
