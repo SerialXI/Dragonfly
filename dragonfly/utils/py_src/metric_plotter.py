@@ -18,6 +18,7 @@ class MetricPlotter(QtWidgets.QMainWindow):
         self.output_fname = parent.fname.text()
         self.metrics = {}
         self.num_frames = 0
+        self._settings_restored = False
 
         self._init_ui()
         self._load_metrics()
@@ -72,14 +73,15 @@ class MetricPlotter(QtWidgets.QMainWindow):
         line.addWidget(QtWidgets.QLabel('Bins:', self))
         self.num_bins = QtWidgets.QSpinBox(self)
         self.num_bins.setRange(5, 1000)
-        self.num_bins.setValue(100)
+        self.num_bins.setValue(int(self.parent.settings.value('metric_plotter/bins', defaultValue=100)))
         self.num_bins.valueChanged.connect(self._plot)
         line.addWidget(self.num_bins)
         self.skip_blacklist = QtWidgets.QCheckBox('Skip blacklisted', self)
-        self.skip_blacklist.setChecked(True)
+        self.skip_blacklist.setChecked(self._get_bool_setting('metric_plotter/skip_blacklist', True))
         self.skip_blacklist.stateChanged.connect(self._plot)
         line.addWidget(self.skip_blacklist)
         self.current_mode = QtWidgets.QCheckBox('Current mode only', self)
+        self.current_mode.setChecked(self._get_bool_setting('metric_plotter/current_mode', False))
         self.current_mode.stateChanged.connect(self._plot)
         line.addWidget(self.current_mode)
         button = QtWidgets.QPushButton('Refresh', self)
@@ -171,6 +173,9 @@ class MetricPlotter(QtWidgets.QMainWindow):
         default_y = old_y if old_y in names else self._default_y_metric(names)
         self._set_combo_text(self.y_metric, default_y)
         self._set_combo_text(self.color_metric, old_c if old_c in names else 'None')
+        if not self._settings_restored:
+            self._restore_settings(names)
+            self._settings_restored = True
         for combo in (self.x_metric, self.y_metric, self.color_metric):
             combo.blockSignals(False)
 
@@ -188,6 +193,35 @@ class MetricPlotter(QtWidgets.QMainWindow):
         index = combo.findText(text)
         if index >= 0:
             combo.setCurrentIndex(index)
+
+    def _restore_settings(self, names):
+        xname = self.parent.settings.value('metric_plotter/x_metric', defaultValue='frame')
+        yname = self.parent.settings.value('metric_plotter/y_metric', defaultValue='')
+        cname = self.parent.settings.value('metric_plotter/color_metric', defaultValue='None')
+        plot_type = self.parent.settings.value('metric_plotter/plot_type', defaultValue='Scatter')
+
+        if xname in names:
+            self._set_combo_text(self.x_metric, xname)
+        if yname in names:
+            self._set_combo_text(self.y_metric, yname)
+        if cname == 'None' or cname in names:
+            self._set_combo_text(self.color_metric, cname)
+        self._set_combo_text(self.plot_type, plot_type)
+
+    def _save_settings(self):
+        self.parent.settings.setValue('metric_plotter/x_metric', self.x_metric.currentText())
+        self.parent.settings.setValue('metric_plotter/y_metric', self.y_metric.currentText())
+        self.parent.settings.setValue('metric_plotter/color_metric', self.color_metric.currentText())
+        self.parent.settings.setValue('metric_plotter/plot_type', self.plot_type.currentText())
+        self.parent.settings.setValue('metric_plotter/bins', self.num_bins.value())
+        self.parent.settings.setValue('metric_plotter/skip_blacklist', self.skip_blacklist.isChecked())
+        self.parent.settings.setValue('metric_plotter/current_mode', self.current_mode.isChecked())
+
+    def _get_bool_setting(self, name, default):
+        value = self.parent.settings.value(name, defaultValue=default)
+        if isinstance(value, str):
+            return value.lower() in ('1', 'true', 'yes')
+        return bool(value)
 
     def _plot(self):
         if not self.metrics or self.x_metric.count() == 0 or self.y_metric.count() == 0:
@@ -255,5 +289,6 @@ class MetricPlotter(QtWidgets.QMainWindow):
         return os.path.basename(os.path.dirname(fname)) + '/' + os.path.basename(fname)
 
     def closeEvent(self, event):
+        self._save_settings()
         self.windowClosed.emit()
         event.accept()

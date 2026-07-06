@@ -187,7 +187,8 @@ class Viewer2D(QtWidgets.QMainWindow):
         line.addStretch(1)
         label = QtWidgets.QLabel('Filter size', self)
         line.addWidget(label)
-        self.filt_size = QtWidgets.QLineEdit('1000', self)
+        self.filt_size = QtWidgets.QLineEdit(
+            str(self.parent.settings.value('viewer2d/filter_size', defaultValue='1000')), self)
         self.filt_size.editingFinished.connect(self._plot)
         line.addWidget(self.filt_size)
         label = QtWidgets.QLabel('Class', self)
@@ -248,6 +249,7 @@ class Viewer2D(QtWidgets.QMainWindow):
         self.canvas.draw()
 
     def closeEvent(self, event):
+        self.parent.settings.setValue('viewer2d/filter_size', self.filt_size.text())
         self.windowClosed.emit()
         event.accept()
 

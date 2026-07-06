@@ -75,19 +75,23 @@ class Phaser2D(QtWidgets.QMainWindow):
         vbox.addLayout(line)
         label = QtWidgets.QLabel('Radius Min:', self)
         line.addWidget(label)
-        self.radmin = QtWidgets.QLineEdit('15', self)
+        self.radmin = QtWidgets.QLineEdit(
+            str(self.parent.settings.value('phaser2d/radmin', defaultValue='15')), self)
         self.radmin.setFixedWidth(30)
         self.radmin.returnPressed.connect(self._preprocess)
         line.addWidget(self.radmin)
         label = QtWidgets.QLabel('Max:', self)
         line.addWidget(label)
-        self.radmax = QtWidgets.QLineEdit(str(self.intens.shape[-1]//2-1), self)
+        self.radmax = QtWidgets.QLineEdit(
+            str(self.parent.settings.value('phaser2d/radmax',
+                                           defaultValue=str(self.intens.shape[-1]//2-1))), self)
         self.radmax.setFixedWidth(30)
         self.radmax.returnPressed.connect(self._preprocess)
         line.addWidget(self.radmax)
         label = QtWidgets.QLabel('Kernel:', self)
         line.addWidget(label)
-        self.kwidth = QtWidgets.QLineEdit('15', self)
+        self.kwidth = QtWidgets.QLineEdit(
+            str(self.parent.settings.value('phaser2d/kwidth', defaultValue='15')), self)
         self.kwidth.setFixedWidth(30)
         self.kwidth.returnPressed.connect(self._preprocess)
         line.addWidget(self.kwidth)
@@ -100,17 +104,19 @@ class Phaser2D(QtWidgets.QMainWindow):
         vbox.addLayout(line)
         label = QtWidgets.QLabel('Num support:', self)
         line.addWidget(label)
-        self.num_supp = QtWidgets.QLineEdit('1000', self)
+        self.num_supp = QtWidgets.QLineEdit(
+            str(self.parent.settings.value('phaser2d/num_supp', defaultValue='1000')), self)
         self.num_supp.setFixedWidth(60)
         line.addWidget(self.num_supp)
         label = QtWidgets.QLabel('Algorithm:', self)
         line.addWidget(label)
-        self.algo_str = QtWidgets.QLineEdit('50 ER 100 DM 100 ER', self)
+        self.algo_str = QtWidgets.QLineEdit(
+            str(self.parent.settings.value('phaser2d/algo_str', defaultValue='50 ER 100 DM 100 ER')), self)
         self.algo_str.setFixedWidth(180)
         line.addWidget(self.algo_str)
         line.addStretch(1)
         self.pos_flag = QtWidgets.QCheckBox('Positivity', self)
-        self.pos_flag.setChecked(True)
+        self.pos_flag.setChecked(self._get_bool_setting('phaser2d/positivity', True))
         line.addWidget(self.pos_flag)
         button = QtWidgets.QPushButton('Phase', self)
         button.clicked.connect(self._phase)
@@ -125,6 +131,7 @@ class Phaser2D(QtWidgets.QMainWindow):
         self.show_icalc.setEnabled(False)
         line.addWidget(self.show_icalc)
         self.show_supp = QtWidgets.QCheckBox('Show support', self)
+        self.show_supp.setChecked(self._get_bool_setting('phaser2d/show_support', False))
         self.show_supp.stateChanged.connect(self._plot)
         line.addWidget(self.show_supp)
         button = QtWidgets.QPushButton('Save', self)
@@ -235,6 +242,22 @@ class Phaser2D(QtWidgets.QMainWindow):
             f['phasing/dens'][num] = self.phaser.current
             f['phasing/support'][num] = self.phaser.support
 
+    def _save_settings(self):
+        self.parent.settings.setValue('phaser2d/radmin', self.radmin.text())
+        self.parent.settings.setValue('phaser2d/radmax', self.radmax.text())
+        self.parent.settings.setValue('phaser2d/kwidth', self.kwidth.text())
+        self.parent.settings.setValue('phaser2d/num_supp', self.num_supp.text())
+        self.parent.settings.setValue('phaser2d/algo_str', self.algo_str.text())
+        self.parent.settings.setValue('phaser2d/positivity', self.pos_flag.isChecked())
+        self.parent.settings.setValue('phaser2d/show_support', self.show_supp.isChecked())
+
+    def _get_bool_setting(self, name, default):
+        value = self.parent.settings.value(name, defaultValue=default)
+        if isinstance(value, str):
+            return value.lower() in ('1', 'true', 'yes')
+        return bool(value)
+
     def closeEvent(self, event):
+        self._save_settings()
         self.windowClosed.emit()
         event.accept()
