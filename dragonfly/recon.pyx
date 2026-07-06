@@ -72,8 +72,98 @@ cdef class EMCRecon():
 
         if itr.iter.par.lazy_data and itr.stochastic_active():
             MPI.COMM_WORLD.Bcast([<uint8_t[:itr.iter.tot_num_data]>itr.iter.blacklist, MPI.BYTE], 0)
-            itr.finalize_blacklist()
-            itr.load_active_data(update_powder=True)
+            itr._finalize_blacklist()
+            self.load_active_data(update_powder=True)
+
+    def calc_frame_counts(self):
+        '''Calculate per-frame counts, reducing partial MPI results when needed.'''
+        cdef int d
+        cdef int rank = MPI.COMM_WORLD.rank
+        cdef int num_proc = MPI.COMM_WORLD.size
+        cdef c_iterate.iterate *itr = self.mdata.iter
+        cdef int[:] num_data
+        cdef int[:] fcounts
+        cdef double[:] mean_count
+
+        if num_proc == 1:
+            self.iter.calc_frame_counts()
+            return
+
+        num_data = self.iter.calc_frame_counts_partial(rank, num_proc)
+        fcounts = <int[:itr.tot_num_data]> itr.fcounts
+        mean_count = <double[:itr.num_det]> itr.mean_count
+
+        MPI.COMM_WORLD.Allreduce(MPI.IN_PLACE, [fcounts, MPI.INT], op=MPI.SUM)
+        MPI.COMM_WORLD.Allreduce(MPI.IN_PLACE, [mean_count, MPI.DOUBLE], op=MPI.SUM)
+        MPI.COMM_WORLD.Allreduce(MPI.IN_PLACE, [num_data, MPI.INT], op=MPI.SUM)
+        for d in range(itr.num_det):
+            if num_data[d] > 0:
+                mean_count[d] /= num_data[d]
+
+    def calc_sum_fact(self):
+        '''Calculate per-frame log-factorial terms, reducing partial MPI results.'''
+        cdef int rank = MPI.COMM_WORLD.rank
+        cdef int num_proc = MPI.COMM_WORLD.size
+        cdef c_iterate.iterate *itr = self.mdata.iter
+        cdef double[:] sum_fact
+
+        if num_proc == 1:
+            self.iter.calc_sum_fact()
+            return
+
+        self.iter.calc_sum_fact_partial(rank, num_proc)
+        sum_fact = <double[:itr.tot_num_data]> itr.sum_fact
+        MPI.COMM_WORLD.Allreduce(MPI.IN_PLACE, [sum_fact, MPI.DOUBLE], op=MPI.SUM)
+
+    def calc_powder(self):
+        '''Calculate powder images, reducing partial MPI results when needed.'''
+        cdef int detn, t
+        cdef int rank = MPI.COMM_WORLD.rank
+        cdef int num_proc = MPI.COMM_WORLD.size
+        cdef c_iterate.iterate *itr = self.mdata.iter
+        cdef int[:] nframes
+        cdef double[:] powder
+
+        if num_proc == 1:
+            self.iter.calc_powder()
+            return
+        if not itr.det[0].with_bg:
+            return
+
+        nframes = self.iter.calc_powder_partial(rank, num_proc)
+        for detn in range(itr.num_det):
+            powder = <double[:itr.det[detn].num_pix]> itr.det[detn].powder
+            MPI.COMM_WORLD.Allreduce(MPI.IN_PLACE, [powder, MPI.DOUBLE], op=MPI.SUM)
+        MPI.COMM_WORLD.Allreduce(MPI.IN_PLACE, [nframes, MPI.INT], op=MPI.SUM)
+        for detn in range(itr.num_det):
+            if nframes[detn] > 0:
+                powder = <double[:itr.det[detn].num_pix]> itr.det[detn].powder
+                for t in range(itr.det[detn].num_pix):
+                    powder[t] /= nframes[detn]
+
+    def load_active_data(self, update_powder=False):
+        '''Load active lazy frames and recalculate stats with MPI reductions.'''
+        cdef c_iterate.iterate *itr = self.mdata.iter
+
+        if itr.par.lazy_data == 0:
+            return
+        self.iter.load_active_frames()
+
+        self.calc_frame_counts()
+        self.iter._blacklist_zeros()
+        self.calc_sum_fact()
+        if update_powder:
+            self.calc_powder()
+        if itr.beta != NULL:
+            free(itr.beta)
+            itr.beta = NULL
+        if itr.beta_start != NULL:
+            free(itr.beta_start)
+            itr.beta_start = NULL
+        if itr.par.beta_config < 0.:
+            self.iter.calc_beta()
+        else:
+            self.iter.calc_beta(itr.par.beta_config)
 
     def run_iteration(self, dynamic=False, active_data_loaded=False):
         '''Run a single EMC iteration.
@@ -103,9 +193,9 @@ cdef class EMCRecon():
             refreshed = self.iter.update_blacklist(finalize=False)
             if self.iter.stochastic_active() and refreshed:
                 MPI.COMM_WORLD.Bcast([<uint8_t[:itr.tot_num_data]>itr.blacklist, MPI.BYTE], 0)
-            self.iter.finalize_blacklist()
+            self.iter._finalize_blacklist()
             if itr.par.lazy_data and refreshed:
-                self.iter.load_active_data()
+                self.load_active_data()
         if itr.par.iteration == 1:
             self.write_log_file_header()
 

@@ -241,7 +241,8 @@ cdef class Iterate:
         free(self.iter.fcounts)
         self.iter.fcounts = NULL
         if self.iter.par.lazy_data == 0:
-            c_iterate.calc_frame_counts(self.iter)
+            self.calc_frame_counts()
+            self._blacklist_zeros()
 
         free(self.iter.last_selected)
         self.iter.last_selected = NULL
@@ -249,7 +250,7 @@ cdef class Iterate:
         free(self.iter.sum_fact)
         self.iter.sum_fact = NULL
         if self.iter.par.lazy_data == 0:
-            c_iterate.calc_sum_fact(self.iter)
+            self.calc_sum_fact()
 
         if self.iter.par.need_scaling == 1:
             free(self.iter.scale)
@@ -265,7 +266,7 @@ cdef class Iterate:
             self.calc_beta()
 
         if self.iter.par.lazy_data == 0:
-            c_iterate.calc_powder(self.iter)
+            self.calc_powder()
 
     def set_data(self, CDataset in_dset):
         '''Set the data with a new dataset.
@@ -293,17 +294,96 @@ cdef class Iterate:
         self.iter.static_blacklist = <uint8_t*> calloc(self.iter.tot_num_data, sizeof(uint8_t))
         self.iter.num_blacklist = 0
         if self.iter.par.lazy_data == 0:
-            c_iterate.calc_frame_counts(self.iter)
-            c_iterate.calc_sum_fact(self.iter)
-            c_iterate.calc_powder(self.iter)
+            self.calc_frame_counts()
+            self.calc_sum_fact()
+            self.calc_powder()
 
     def refresh_data_stats(self, update_powder=True):
         '''Recalculate eager data statistics after changing the blacklist.'''
         if self.iter.par.lazy_data == 0:
-            c_iterate.calc_frame_counts(self.iter)
-            c_iterate.calc_sum_fact(self.iter)
+            self.calc_frame_counts()
+            self._blacklist_zeros()
+            self.calc_sum_fact()
             if update_powder:
-                c_iterate.calc_powder(self.iter)
+                self.calc_powder()
+
+    def calc_frame_counts(self):
+        '''Calculate per-frame counts.'''
+        c_iterate.calc_frame_counts(self.iter)
+
+    def calc_frame_counts_partial(self, int rank, int num_proc):
+        '''Calculate this rank's partial per-frame counts.'''
+        cdef int[:] num_data
+
+        num_data = np.zeros(self.iter.num_det, dtype=np.int32)
+        c_iterate.calc_frame_counts_partial(self.iter, rank, num_proc, &num_data[0])
+        return np.asarray(num_data)
+
+    def _blacklist_zeros(self):
+        '''Add active zero-photon frames to the static blacklist.'''
+        cdef int dset = 0
+        cdef int d, curr_d, detn
+        cdef int num_added = 0
+        cdef int[:] active_count
+        cdef int[:] zero_count
+        cdef dataset *curr = self.iter.dset
+
+        if self.iter.fcounts == NULL:
+            raise AttributeError('Need frame counts before blacklisting zero-count frames')
+        if self.iter.mean_count == NULL:
+            raise AttributeError('Need mean counts before blacklisting zero-count frames')
+        if self.iter.blacklist == NULL or self.iter.static_blacklist == NULL:
+            raise AttributeError('Blacklist has not been initialized')
+
+        active_count = np.zeros(self.iter.num_det, dtype=np.int32)
+        zero_count = np.zeros(self.iter.num_det, dtype=np.int32)
+
+        while curr != NULL:
+            detn = self.iter.det_mapping[dset]
+            for curr_d in range(curr.num_data):
+                d = curr.num_offset + curr_d
+                if self.iter.blacklist[d] == 0:
+                    active_count[detn] += 1
+                    if self.iter.fcounts[d] == 0:
+                        self.iter.blacklist[d] = 1
+                        self.iter.static_blacklist[d] = 1
+                        zero_count[detn] += 1
+                        num_added += 1
+            dset += 1
+            curr = curr.next
+
+        if num_added == 0:
+            return 0
+
+        for detn in range(self.iter.num_det):
+            if zero_count[detn] > 0 and zero_count[detn] < active_count[detn]:
+                self.iter.mean_count[detn] *= (<double> active_count[detn] /
+                                               (active_count[detn] - zero_count[detn]))
+
+        if self.iter.par.rank == 0:
+            sys.stderr.write('WARNING: Auto-blacklisted %d zero-photon frame(s)\n' % num_added)
+        self._finalize_blacklist()
+        return num_added
+
+    def calc_sum_fact(self):
+        '''Calculate per-frame log-factorial terms.'''
+        c_iterate.calc_sum_fact(self.iter)
+
+    def calc_sum_fact_partial(self, int rank, int num_proc):
+        '''Calculate this rank's partial per-frame log-factorial terms.'''
+        c_iterate.calc_sum_fact_partial(self.iter, rank, num_proc)
+
+    def calc_powder(self):
+        '''Calculate detector powder images.'''
+        c_iterate.calc_powder(self.iter)
+
+    def calc_powder_partial(self, int rank, int num_proc):
+        '''Calculate this rank's partial detector powder images.'''
+        cdef int[:] nframes
+
+        nframes = np.zeros(self.iter.num_det, dtype=np.int32)
+        c_iterate.calc_powder_partial(self.iter, rank, num_proc, &nframes[0])
+        return np.asarray(nframes)
 
     def set_quat(self, Quaternion quaternion):
         '''Set the quaternion orientations.
@@ -348,19 +428,15 @@ cdef class Iterate:
 
     def load_active_data(self, update_powder=False):
         '''Load currently active sparse binary frames for lazy_data mode.'''
-        cdef dataset *curr = self.iter.dset
-
         if self.iter.par.lazy_data == 0:
             return
-        while curr != NULL:
-            if c_emcfile.load_active_frames(curr, self.iter.blacklist) != 0:
-                raise ValueError('Could not load active frames')
-            curr = curr.next
+        self.load_active_frames()
 
-        c_iterate.calc_frame_counts(self.iter)
-        c_iterate.calc_sum_fact(self.iter)
+        self.calc_frame_counts()
+        self._blacklist_zeros()
+        self.calc_sum_fact()
         if update_powder:
-            c_iterate.calc_powder(self.iter)
+            self.calc_powder()
         if self.iter.beta != NULL:
             free(self.iter.beta)
             self.iter.beta = NULL
@@ -371,6 +447,17 @@ cdef class Iterate:
             self.calc_beta()
         else:
             self.calc_beta(self.iter.par.beta_config)
+
+    def load_active_frames(self):
+        '''Load currently active sparse binary frames without recalculating stats.'''
+        cdef dataset *curr = self.iter.dset
+
+        if self.iter.par.lazy_data == 0:
+            return
+        while curr != NULL:
+            if c_emcfile.load_active_frames(curr, self.iter.blacklist) != 0:
+                raise ValueError('Could not load active frames')
+            curr = curr.next
 
     def parse_scale(self, fname, bg=False):
         '''Parse or initialize scale factors.
@@ -571,10 +658,10 @@ cdef class Iterate:
                     active[good[~selected]] = 1
 
         if finalize:
-            self.finalize_blacklist()
+            self._finalize_blacklist()
         return refresh
 
-    def finalize_blacklist(self):
+    def _finalize_blacklist(self):
         '''Finalize local blacklist-derived counters after any distribution.'''
         cdef int d
         cdef uint8_t[:] active_view
