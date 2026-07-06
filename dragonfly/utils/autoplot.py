@@ -609,6 +609,8 @@ class ProgressViewer(QtWidgets.QMainWindow):
         self.checker = QtCore.QTimer(self)
 
         self._read_config(config)
+        self._cid = None
+        self._dragid = None
         self._init_ui()
         if model is not None:
             self._parse_and_plot(rots=False)
@@ -1008,15 +1010,12 @@ class ProgressViewer(QtWidgets.QMainWindow):
 
     def _plot_vol(self, num=None, update=False):
         if self.recon_type == '2d':
-            self._cid = self.canvas.mpl_connect('button_press_event', self._select_mode)
             if num is None:
                 if self.num_modes > 1:
                     num = int(self.modenum.text())
                 else:
                     num = 0
         elif self.recon_type == '3d':
-            self._cid = self.canvas.mpl_connect('button_press_event', self._show_menu)
-            self._dragid = self.canvas.mpl_connect('motion_notify_event', self._drag_normvec)
             if num is None:
                 num = int(self.layernum.text())
         argsdict = {'vrange': (float(self.rangemin.text()), float(self.rangestr.text())),
@@ -1025,7 +1024,18 @@ class ProgressViewer(QtWidgets.QMainWindow):
         if update:
             self.vol_plotter.update_mode(num, **argsdict)
         else:
+            if self._cid is not None:
+                self.canvas.mpl_disconnect(self._cid)
+                self._cid = None
+            if self._dragid is not None:
+                self.canvas.mpl_disconnect(self._dragid)
+                self._dragid = None
             self.vol_plotter.plot(num, **argsdict)
+            if self.recon_type == '2d':
+                self._cid = self.canvas.mpl_connect('button_press_event', self._select_mode)
+            elif self.recon_type == '3d':
+                self._cid = self.canvas.mpl_connect('button_press_event', self._show_menu)
+                self._dragid = self.canvas.mpl_connect('motion_notify_event', self._drag_normvec)
         if self.num_modes > 1:
             self.old_modenum = self.modenum.value()
 
