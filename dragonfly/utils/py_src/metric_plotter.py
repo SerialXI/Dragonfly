@@ -89,6 +89,13 @@ class MetricPlotter(QtWidgets.QMainWindow):
 
         self.show()
 
+    def update_iteration(self):
+        self._load_metrics()
+
+    def update_mode(self):
+        if self.current_mode.isChecked():
+            self._plot()
+
     def _load_metrics(self):
         self.output_fname = self.parent.fname.text()
         self.metrics = {}

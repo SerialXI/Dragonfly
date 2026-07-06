@@ -963,6 +963,7 @@ class ProgressViewer(QtWidgets.QMainWindow):
             if self.need_replot:
                 self.fname.setText(self._gen_model_fname(self.iternum.value()))
         self._parse_and_plot()
+        self._update_metric_iteration()
 
     def _iterslider_moved(self, value):
         self.iternum.setValue(value)
@@ -974,6 +975,7 @@ class ProgressViewer(QtWidgets.QMainWindow):
             self._parse_and_plot()
         else:
             self._plot_vol(update=True)
+        self._update_metric_mode()
 
     def _modeslider_moved(self, value):
         self.modenum.setValue(value)
@@ -1091,6 +1093,7 @@ class ProgressViewer(QtWidgets.QMainWindow):
                  self.color_map.checkedAction().text())
             self._parse_and_plot()
             self.emclog_text.setText(log_text)
+            self._update_metric_iteration()
 
     def _keep_checking(self):
         if self.ifcheck.isChecked():
@@ -1310,6 +1313,14 @@ class ProgressViewer(QtWidgets.QMainWindow):
             return
         self.metric_viewer = metric_plotter.MetricPlotter(self)
         self.metric_viewer.windowClosed.connect(self._metric_viewer_closed)
+
+    def _update_metric_iteration(self):
+        if self.metric_viewer is not None:
+            self.metric_viewer.update_iteration()
+
+    def _update_metric_mode(self):
+        if self.metric_viewer is not None:
+            self.metric_viewer.update_mode()
 
     def _open_viewer2d(self):
         if self.viewer2d is not None:
