@@ -42,9 +42,12 @@ cdef extern from "src/iterate.h" nogil:
         double likelihood, mutual_info, rms_change
 
     void calc_frame_counts(iterate*)
+    void calc_frame_counts_partial(iterate*, int, int, int*)
     void calc_beta(double, iterate*)
     void calc_sum_fact(iterate*)
+    void calc_sum_fact_partial(iterate*, int, int)
     void calc_powder(iterate*)
+    void calc_powder_partial(iterate*, int, int, int*)
 
 cdef class Iterate:
     cdef iterate *iter

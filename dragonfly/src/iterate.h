@@ -39,8 +39,11 @@ struct iterate {
 } ;
 
 void calc_frame_counts(struct iterate*) ;
+void calc_frame_counts_partial(struct iterate*, int, int, int*) ;
 void calc_beta(double, struct iterate*) ;
 void calc_sum_fact(struct iterate*) ;
+void calc_sum_fact_partial(struct iterate*, int, int) ;
 void calc_powder(struct iterate*) ;
+void calc_powder_partial(struct iterate*, int, int, int*) ;
 
 #endif // ITERATE_H
