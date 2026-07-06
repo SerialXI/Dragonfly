@@ -20,6 +20,7 @@ from . import frameviewer
 from .py_src import gui_utils
 from .py_src import clpca
 from .py_src import phaser_gui
+from .py_src import metric_plotter
 
 class MySpinBox(QtWidgets.QSpinBox):
     '''Overriding QSpinBox to update need_replot'''
@@ -619,6 +620,7 @@ class ProgressViewer(QtWidgets.QMainWindow):
         self.clpca = None
         self.phaser2d = None
         self.viewer2d = None
+        self.metric_viewer = None
 
     def _init_ui(self):
         with open(os.path.join(os.path.dirname(os.path.realpath(__file__)), 'py_src/style.css'), 'r') as f:
@@ -726,6 +728,10 @@ class ProgressViewer(QtWidgets.QMainWindow):
         action = analysismenu.addAction('Open &CLPCA')
         action.triggered.connect(self._open_clpca)
         action.setToolTip('Open CLPCA analysis window')
+
+        action = analysismenu.addAction('Frame &Metrics Plot')
+        action.triggered.connect(self._open_metric_viewer)
+        action.setToolTip('Plot frame-wise metrics from the current HDF5 output')
 
         action = analysismenu.addAction('2D Class &Phaser')
         action.triggered.connect(self._open_phaser2d)
@@ -1299,6 +1305,12 @@ class ProgressViewer(QtWidgets.QMainWindow):
         self.phaser2d = phaser_gui.Phaser2D(self)
         self.phaser2d.windowClosed.connect(self._phaser2d_closed)
 
+    def _open_metric_viewer(self):
+        if self.metric_viewer is not None:
+            return
+        self.metric_viewer = metric_plotter.MetricPlotter(self)
+        self.metric_viewer.windowClosed.connect(self._metric_viewer_closed)
+
     def _open_viewer2d(self):
         if self.viewer2d is not None:
             return
@@ -1362,9 +1374,15 @@ class ProgressViewer(QtWidgets.QMainWindow):
     def _viewer2d_closed(self):
         self.viewer2d = None
 
+    @QtCore.Slot()
+    def _metric_viewer_closed(self):
+        self.metric_viewer = None
+
     def closeEvent(self, event): # pylint: disable=C0103
         if self.fviewer is not None:
             self.fviewer.close()
+        if self.metric_viewer is not None:
+            self.metric_viewer.close()
         self._save_settings()
         event.accept()
 
