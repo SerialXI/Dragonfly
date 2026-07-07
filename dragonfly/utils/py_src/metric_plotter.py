@@ -3,10 +3,78 @@ import os
 import h5py
 import numpy as np
 from PyQt5 import QtCore, QtWidgets # pylint: disable=import-error
+from PyQt5 import QtGui # pylint: disable=import-error
 from matplotlib.figure import Figure
 from matplotlib.backends.backend_qt5agg import FigureCanvas # pylint: disable=no-name-in-module
 
 from . import gui_utils
+
+
+class MetricComboBox(QtWidgets.QComboBox):
+    def __init__(self, parent=None):
+        super(MetricComboBox, self).__init__(parent)
+        self.setView(QtWidgets.QTreeView(self))
+        self.view().setHeaderHidden(True)
+        self.view().setItemsExpandable(True)
+        self.view().setRootIsDecorated(True)
+        self._model = QtGui.QStandardItemModel(self)
+        self.setModel(self._model)
+
+    def set_metrics(self, names, include_none=False):
+        self._model.clear()
+        if include_none:
+            self._add_item('None')
+        occ_parent = None
+        for name in names:
+            if name.startswith('occupancy_'):
+                if occ_parent is None:
+                    occ_parent = QtGui.QStandardItem('Occupancies')
+                    occ_parent.setSelectable(False)
+                    self._model.appendRow(occ_parent)
+                item = QtGui.QStandardItem(name.replace('occupancy_', 'mode '))
+                item.setData(name, QtCore.Qt.UserRole)
+                occ_parent.appendRow(item)
+            else:
+                self._add_item(name)
+        self.view().expandAll()
+
+    def currentText(self): # pylint: disable=invalid-name
+        index = self.view().currentIndex()
+        if index.isValid():
+            item = self._model.itemFromIndex(index)
+            value = item.data(QtCore.Qt.UserRole)
+            if value is not None:
+                return value
+        return super(MetricComboBox, self).currentText()
+
+    def findText(self, text, flags=QtCore.Qt.MatchExactly): # pylint: disable=invalid-name,unused-argument
+        return self._find_index(text)
+
+    def setCurrentIndex(self, index): # pylint: disable=invalid-name
+        if isinstance(index, QtCore.QModelIndex):
+            self.view().setCurrentIndex(index)
+            self.setRootModelIndex(index.parent())
+            super(MetricComboBox, self).setCurrentIndex(index.row())
+            self.setRootModelIndex(QtCore.QModelIndex())
+        else:
+            super(MetricComboBox, self).setCurrentIndex(index)
+
+    def _add_item(self, name):
+        item = QtGui.QStandardItem(name)
+        item.setData(name, QtCore.Qt.UserRole)
+        self._model.appendRow(item)
+
+    def _find_index(self, text):
+        for row in range(self._model.rowCount()):
+            item = self._model.item(row)
+            value = item.data(QtCore.Qt.UserRole)
+            if value == text:
+                return self._model.indexFromItem(item)
+            for child_row in range(item.rowCount()):
+                child = item.child(child_row)
+                if child.data(QtCore.Qt.UserRole) == text:
+                    return self._model.indexFromItem(child)
+        return -1
 
 
 class MetricPlotter(QtWidgets.QMainWindow):
@@ -51,17 +119,18 @@ class MetricPlotter(QtWidgets.QMainWindow):
         line = QtWidgets.QHBoxLayout()
         vbox.addLayout(line)
         line.addWidget(QtWidgets.QLabel('X:', self))
-        self.x_metric = QtWidgets.QComboBox(self)
+        self.x_metric = MetricComboBox(self)
         self.x_metric.currentIndexChanged.connect(self._plot)
         line.addWidget(self.x_metric)
         line.addWidget(QtWidgets.QLabel('Y:', self))
-        self.y_metric = QtWidgets.QComboBox(self)
+        self.y_metric = MetricComboBox(self)
         self.y_metric.currentIndexChanged.connect(self._plot)
         line.addWidget(self.y_metric)
         line.addWidget(QtWidgets.QLabel('Color:', self))
-        self.color_metric = QtWidgets.QComboBox(self)
+        self.color_metric = MetricComboBox(self)
         self.color_metric.currentIndexChanged.connect(self._plot)
         line.addWidget(self.color_metric)
+        line.addStretch(1)
 
         line = QtWidgets.QHBoxLayout()
         vbox.addLayout(line)
@@ -76,10 +145,6 @@ class MetricPlotter(QtWidgets.QMainWindow):
         self.num_bins.setValue(int(self.parent.settings.value('metric_plotter/bins', defaultValue=100)))
         self.num_bins.valueChanged.connect(self._plot)
         line.addWidget(self.num_bins)
-        self.skip_blacklist = QtWidgets.QCheckBox('Skip blacklisted', self)
-        self.skip_blacklist.setChecked(self._get_bool_setting('metric_plotter/skip_blacklist', True))
-        self.skip_blacklist.stateChanged.connect(self._plot)
-        line.addWidget(self.skip_blacklist)
         self.current_mode = QtWidgets.QCheckBox('Current mode only', self)
         self.current_mode.setChecked(self._get_bool_setting('metric_plotter/current_mode', False))
         self.current_mode.stateChanged.connect(self._plot)
@@ -164,10 +229,9 @@ class MetricPlotter(QtWidgets.QMainWindow):
         for combo in (self.x_metric, self.y_metric, self.color_metric):
             combo.blockSignals(True)
             combo.clear()
-        self.x_metric.addItems(names)
-        self.y_metric.addItems(names)
-        self.color_metric.addItem('None')
-        self.color_metric.addItems(names)
+        self.x_metric.set_metrics(names)
+        self.y_metric.set_metrics(names)
+        self.color_metric.set_metrics(names, include_none=True)
 
         self._set_combo_text(self.x_metric, old_x if old_x in names else 'frame')
         default_y = old_y if old_y in names else self._default_y_metric(names)
@@ -180,7 +244,6 @@ class MetricPlotter(QtWidgets.QMainWindow):
             combo.blockSignals(False)
 
         self.current_mode.setEnabled('mode' in self.metrics)
-        self.skip_blacklist.setEnabled('blacklist' in self.metrics)
         self.status_label.setText('%d frames, %d metrics' % (self.num_frames, len(names)))
 
     def _default_y_metric(self, names):
@@ -191,7 +254,9 @@ class MetricPlotter(QtWidgets.QMainWindow):
 
     def _set_combo_text(self, combo, text):
         index = combo.findText(text)
-        if index >= 0:
+        if isinstance(index, QtCore.QModelIndex) and index.isValid():
+            combo.setCurrentIndex(index)
+        elif index >= 0:
             combo.setCurrentIndex(index)
 
     def _restore_settings(self, names):
@@ -214,7 +279,6 @@ class MetricPlotter(QtWidgets.QMainWindow):
         self.parent.settings.setValue('metric_plotter/color_metric', self.color_metric.currentText())
         self.parent.settings.setValue('metric_plotter/plot_type', self.plot_type.currentText())
         self.parent.settings.setValue('metric_plotter/bins', self.num_bins.value())
-        self.parent.settings.setValue('metric_plotter/skip_blacklist', self.skip_blacklist.isChecked())
         self.parent.settings.setValue('metric_plotter/current_mode', self.current_mode.isChecked())
 
     def _get_bool_setting(self, name, default):
@@ -234,8 +298,13 @@ class MetricPlotter(QtWidgets.QMainWindow):
         y = self.metrics[yname].astype('f8')
         keep = np.isfinite(x) & np.isfinite(y)
 
-        if self.skip_blacklist.isChecked() and 'blacklist' in self.metrics:
+        if 'blacklist' in self.metrics:
             keep &= self.metrics['blacklist'] == 0
+        if self.parent.blacklist is not None:
+            static_keep = np.zeros_like(keep)
+            nstatic = min(len(static_keep), len(self.parent.blacklist))
+            static_keep[:nstatic] = self.parent.blacklist[:nstatic] == 0
+            keep &= static_keep
         if self.current_mode.isChecked() and 'mode' in self.metrics:
             keep &= self.metrics['mode'] == self.parent.modenum.value()
         if cname != 'None':

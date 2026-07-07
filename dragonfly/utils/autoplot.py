@@ -1024,6 +1024,11 @@ class ProgressViewer(QtWidgets.QMainWindow):
         self.num_modes = config.getint('emc', 'num_modes', fallback=1)
         self.num_nonrot = config.getint('emc', 'num_nonrot', fallback=0)
         self.num_rot = config.getint('emc', 'num_rot', fallback=-1)
+        blacklist_fname = config.get_filename('emc', 'blacklist_file', fallback=None)
+        if blacklist_fname is None:
+            self.blacklist = None
+        else:
+            self.blacklist = np.loadtxt(blacklist_fname, dtype='u1')
         self.config = config_fname
 
     def _init_sliders(self, slider_type, numvals, init):
