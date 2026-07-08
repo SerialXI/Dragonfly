@@ -160,8 +160,8 @@ void update_scale_bg(struct max_data *common) {
 	// 	Calculate G(0)
 	gradient_d(common, mask, scale_old, Gd_old) ;
 	for (d = 0 ; d < iter->tot_num_data ; ++d)
-	if ((mask[d] != 255) & (Gd_old[d] < 1.e-6)) {
-		// Implies less photons in frame than background
+	if ((mask[d] != 255) & (Gd_old[d] <= 0.)) {
+		// The constrained optimum is at the non-negative boundary.
 		iter->scale[d] = 0.001 ;
 		mask[d] = 255 ;
 	}
@@ -272,7 +272,7 @@ void update_scale_bg(struct max_data *common) {
 		if (num_mask == iter->tot_num_data)
 			break ;
 	}
-	if (i == 50)
+	if ((i == 50) & (param->rank == 0))
 		fprintf(stderr, "WARNING: scale optimization did not converge for %d/%d frames\n", iter->tot_num_data-num_mask, iter->tot_num_data) ;
 	
 	MPI_Bcast(iter->scale, iter->tot_num_data, MPI_DOUBLE, 0, MPI_COMM_WORLD) ;
