@@ -139,6 +139,13 @@ class MetricPlotter(QtWidgets.QMainWindow):
         self.plot_type.addItems(['Scatter', '2D histogram', 'Hexbin'])
         self.plot_type.currentIndexChanged.connect(self._plot)
         line.addWidget(self.plot_type)
+        line.addWidget(QtWidgets.QLabel('Cmap:', self))
+        self.cmap = QtWidgets.QComboBox(self)
+        self.cmap.addItems(['coolwarm', 'magma', 'viridis', 'cividis', 'inferno', 'plasma'])
+        self._set_combo_text(self.cmap,
+                             self.parent.settings.value('metric_plotter/cmap', defaultValue='coolwarm'))
+        self.cmap.currentIndexChanged.connect(self._plot)
+        line.addWidget(self.cmap)
         line.addWidget(QtWidgets.QLabel('Bins:', self))
         self.num_bins = QtWidgets.QSpinBox(self)
         self.num_bins.setRange(5, 1000)
@@ -278,6 +285,7 @@ class MetricPlotter(QtWidgets.QMainWindow):
         self.parent.settings.setValue('metric_plotter/y_metric', self.y_metric.currentText())
         self.parent.settings.setValue('metric_plotter/color_metric', self.color_metric.currentText())
         self.parent.settings.setValue('metric_plotter/plot_type', self.plot_type.currentText())
+        self.parent.settings.setValue('metric_plotter/cmap', self.cmap.currentText())
         self.parent.settings.setValue('metric_plotter/bins', self.num_bins.value())
         self.parent.settings.setValue('metric_plotter/current_mode', self.current_mode.isChecked())
 
@@ -321,19 +329,20 @@ class MetricPlotter(QtWidgets.QMainWindow):
         ax.set_facecolor('k')
 
         plot_type = self.plot_type.currentText()
+        cmap = self.cmap.currentText()
         if len(x) == 0:
             ax.text(0.5, 0.5, 'No frames match filters', ha='center', va='center', transform=ax.transAxes)
         elif plot_type == 'Scatter':
             if color is None:
                 ax.scatter(x, y, s=8, alpha=0.7)
             else:
-                artist = ax.scatter(x, y, c=color, s=8, alpha=0.7, cmap='viridis')
+                artist = ax.scatter(x, y, c=color, s=8, alpha=0.7, cmap=cmap)
                 self.fig.colorbar(artist, ax=ax, label=cname)
         elif plot_type == '2D histogram':
-            artist = ax.hist2d(x, y, bins=self.num_bins.value(), cmap='viridis', cmin=1)
+            artist = ax.hist2d(x, y, bins=self.num_bins.value(), cmap=cmap, cmin=1)
             self.fig.colorbar(artist[3], ax=ax, label='Frame count')
         else:
-            artist = ax.hexbin(x, y, gridsize=self.num_bins.value(), cmap='viridis', mincnt=1)
+            artist = ax.hexbin(x, y, gridsize=self.num_bins.value(), cmap=cmap, mincnt=1)
             self.fig.colorbar(artist, ax=ax, label='Frame count')
 
         ax.set_xlabel(xname)
