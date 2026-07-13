@@ -35,6 +35,12 @@ def make_dens(config_fname, yes=False, verbose=False):
     '''
     config = read_config.MyConfigParser()
     config.read(config_fname)
+    log_file = config.get_filename('make_densities', 'log_file', fallback='simdata.log')
+
+    logging.basicConfig(filename=log_file, level=logging.INFO,
+                        format='%(asctime)s - %(levelname)s - %(message)s')
+    logging.info('\n\nStarting.... make_densities')
+    logging.info(' '.join(sys.argv))
 
     pdb_code = None
     pdb_file = config.get_filename('make_densities', 'in_pdb_file', fallback=None)
@@ -81,10 +87,6 @@ def main():
                         help='Say yes to all prompts')
     args = parser.parse_args()
 
-    logging.basicConfig(filename='simdata.log', level=logging.INFO,
-                        format='%(asctime)s - %(levelname)s - %(message)s')
-    logging.info('\n\nStarting.... make_densities')
-    logging.info(' '.join(sys.argv))
 
     make_dens(args.config_fname, yes=args.yes, verbose=args.verbose)
 
