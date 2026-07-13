@@ -35,7 +35,7 @@ def make_detector(config_fname, yes=False, verbose=False):
     config = read_config.MyConfigParser()
     config.read(config_fname)
 
-    log_file = config.get_filename('make_detector', 'log_file', fallback='logs/simdata.log')
+    log_file = config.get_filename('make_detector', 'log_file', fallback='simdata.log')
 
     logging.basicConfig(filename=log_file, level=logging.INFO,
                         format='%(asctime)s - %(levelname)s - %(message)s')
