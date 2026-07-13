@@ -35,6 +35,15 @@ def make_detector(config_fname, yes=False, verbose=False):
     config = read_config.MyConfigParser()
     config.read(config_fname)
 
+    log_file = config.get_filename('make_detector', 'log_file', fallback='logs/simdata.log')
+
+    logging.basicConfig(filename=log_file, level=logging.INFO,
+                        format='%(asctime)s - %(levelname)s - %(message)s')
+    logging.info('\n\nStarting make_detector....')
+    logging.info(' '.join(sys.argv))
+
+
+
     det_fname = config.get_filename('make_detector', 'out_detector_file')
 
     if not (yes or py_utils.check_to_overwrite(det_fname)):
@@ -81,11 +90,6 @@ def main():
     parser.add_argument('-y', '--yes', action='store_true',
                         help='Say yes to all prompts')
     args = parser.parse_args()
-
-    logging.basicConfig(filename='simdata.log', level=logging.INFO,
-                        format='%(asctime)s - %(levelname)s - %(message)s')
-    logging.info('\n\nStarting make_detector....')
-    logging.info(' '.join(sys.argv))
 
     make_detector(args.config_fname, yes=args.yes, verbose=args.verbose)
 
