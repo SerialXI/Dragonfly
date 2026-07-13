@@ -43,6 +43,15 @@ def make_intens(config_fname, yes=False, verbose=False):
     intens_fname = config.get_filename('make_intensities', 'out_intensity_file')
     num_threads = config.getint('make_intensities', 'num_threads', fallback=4)
 
+    log_file = config.get_filename('make_intensities', 'log_file', fallback='simdata.log')
+
+
+    logging.basicConfig(filename=log_file, level=logging.INFO,
+                        format='%(asctime)s - %(levelname)s - %(message)s')
+    logging.info('\n\nStarting.... make_intensities')
+    logging.info(' '.join(sys.argv))
+
+
     if not (yes or py_utils.check_to_overwrite(intens_fname)):
         return
 
@@ -86,11 +95,6 @@ def main():
     parser.add_argument('-y', '--yes', action='store_true',
                         help='Say yes to all prompts')
     args = parser.parse_args()
-
-    logging.basicConfig(filename='simdata.log', level=logging.INFO,
-                        format='%(asctime)s - %(levelname)s - %(message)s')
-    logging.info('\n\nStarting.... make_intensities')
-    logging.info(' '.join(sys.argv))
 
     make_intens(args.config_fname, yes=args.yes, verbose=args.verbose)
 
