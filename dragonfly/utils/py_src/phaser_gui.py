@@ -108,6 +108,12 @@ class Phaser2D(QtWidgets.QMainWindow):
             str(self.parent.settings.value('phaser2d/num_supp', defaultValue='1000')), self)
         self.num_supp.setFixedWidth(60)
         line.addWidget(self.num_supp)
+        label = QtWidgets.QLabel('Runs:', self)
+        line.addWidget(label)
+        self.num_runs = QtWidgets.QLineEdit(
+            str(self.parent.settings.value('phaser2d/num_runs', defaultValue='1')), self)
+        self.num_runs.setFixedWidth(40)
+        line.addWidget(self.num_runs)
         label = QtWidgets.QLabel('Algorithm:', self)
         line.addWidget(label)
         self.algo_str = QtWidgets.QLineEdit(
@@ -178,9 +184,9 @@ class Phaser2D(QtWidgets.QMainWindow):
 
             ax = self.fig.add_axes([0.7, 0.7, 0.29, 0.29])
             if self.show_supp.isChecked():
-                alpha = supp.astype('f8')
-                alpha[supp==0] = 0.7
-                alpha[supp==1] = 1
+                alpha = np.clip(supp.astype('f8'), 0, 1)
+                alpha = 0.2 + 0.8 * alpha
+                alpha[supp <= 0] = 0.2
                 ax.imshow(np.ones(alpha.shape), vmax=2, vmin=0)
                 ax.imshow(dens, alpha=alpha, cmap='gray_r', interpolation='gaussian')
             else:
@@ -206,10 +212,11 @@ class Phaser2D(QtWidgets.QMainWindow):
         self.phasing_status.setText('')
 
         algo = self._get_algo_list()
+        num_runs = int(self.num_runs.text())
         self.phaser = class_phaser.ClassPhaser(self.curr_intens, num_supp=int(self.num_supp.text()),
                                                positivity=self.pos_flag.isChecked())
         #self.phaser.phase(algo, qlabel=self.phasing_status)
-        self.phaser.phase(algo)
+        self.phaser.phase(algo, num_runs=num_runs)
 
         self.show_icalc.setEnabled(True)
         self._plot()
@@ -234,7 +241,11 @@ class Phaser2D(QtWidgets.QMainWindow):
                 print('Adding phasing group to output file')
                 f['phasing/preproc_intens'] = np.ones_like(self.intens) * np.nan
                 f['phasing/dens'] = np.ones_like(self.intens) * np.nan
-                f['phasing/support'] = np.zeros(self.intens.shape, dtype='bool')
+                f['phasing/support'] = np.zeros(self.intens.shape, dtype='f8')
+            elif 'phasing/support' in f and f['phasing/support'].dtype == np.dtype('bool'):
+                old_support = f['phasing/support'][:].astype('f8')
+                del f['phasing/support']
+                f['phasing/support'] = old_support
 
             num = self.class_num.value()
             print('Updating data for class', num)
@@ -247,6 +258,7 @@ class Phaser2D(QtWidgets.QMainWindow):
         self.parent.settings.setValue('phaser2d/radmax', self.radmax.text())
         self.parent.settings.setValue('phaser2d/kwidth', self.kwidth.text())
         self.parent.settings.setValue('phaser2d/num_supp', self.num_supp.text())
+        self.parent.settings.setValue('phaser2d/num_runs', self.num_runs.text())
         self.parent.settings.setValue('phaser2d/algo_str', self.algo_str.text())
         self.parent.settings.setValue('phaser2d/positivity', self.pos_flag.isChecked())
         self.parent.settings.setValue('phaser2d/show_support', self.show_supp.isChecked())
