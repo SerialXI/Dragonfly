@@ -122,10 +122,16 @@ class MetricPlotter(QtWidgets.QMainWindow):
         self.x_metric = MetricComboBox(self)
         self.x_metric.currentIndexChanged.connect(self._plot)
         line.addWidget(self.x_metric)
+        self.logx_check = QtWidgets.QCheckBox('Log', self)
+        self.logx_check.clicked.connect(self._plot)
+        line.addWidget(self.logx_check)
         line.addWidget(QtWidgets.QLabel('Y:', self))
         self.y_metric = MetricComboBox(self)
         self.y_metric.currentIndexChanged.connect(self._plot)
         line.addWidget(self.y_metric)
+        self.logy_check = QtWidgets.QCheckBox('Log', self)
+        self.logy_check.clicked.connect(self._plot)
+        line.addWidget(self.logy_check)
         line.addWidget(QtWidgets.QLabel('Color:', self))
         self.color_metric = MetricComboBox(self)
         self.color_metric.currentIndexChanged.connect(self._plot)
@@ -339,11 +345,21 @@ class MetricPlotter(QtWidgets.QMainWindow):
                 artist = ax.scatter(x, y, c=color, s=8, alpha=0.7, cmap=cmap)
                 self.fig.colorbar(artist, ax=ax, label=cname)
         elif plot_type == '2D histogram':
-            artist = ax.hist2d(x, y, bins=self.num_bins.value(), cmap=cmap, cmin=1)
+            nbins = self.num_bins.value()
+            binx = np.logspace(np.log10(x.min()), np.log10(x.max()), nbins+1) if self.logx_check.isChecked() else nbins
+            biny = np.logspace(np.log10(y.min()), np.log10(y.max()), nbins+1) if self.logy_check.isChecked() else nbins
+            artist = ax.hist2d(x, y, bins=(binx, biny), cmap=cmap, cmin=1)
             self.fig.colorbar(artist[3], ax=ax, label='Frame count')
         else:
-            artist = ax.hexbin(x, y, gridsize=self.num_bins.value(), cmap=cmap, mincnt=1)
+            artist = ax.hexbin(x, y, gridsize=self.num_bins.value(), cmap=cmap, mincnt=1,
+                               xscale='log' if self.logx_check.isChecked() else 'linear',
+                               yscale='log' if self.logy_check.isChecked() else 'linear')
             self.fig.colorbar(artist, ax=ax, label='Frame count')
+
+        if self.logx_check.isChecked():
+            ax.set_xscale('log')
+        if self.logy_check.isChecked():
+            ax.set_yscale('log')
 
         ax.set_xlabel(xname)
         ax.set_ylabel(yname)
