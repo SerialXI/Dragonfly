@@ -155,6 +155,10 @@ class Phaser2D(QtWidgets.QMainWindow):
         self._plot()
 
     def _plot(self, state=None):
+        view_limits = None
+        if state is not None:
+            view_limits = [(ax.get_xlim(), ax.get_ylim()) for ax in self.fig.axes]
+
         exponent = self.parent.expstr.text()
         rangemin = float(self.parent.rangemin.text())
         rangemax = float(self.parent.rangestr.text())
@@ -193,6 +197,11 @@ class Phaser2D(QtWidgets.QMainWindow):
                 ax.imshow(dens, cmap='gray_r', interpolation='gaussian')
             ax.set_xticks([])
             ax.set_yticks([])
+
+        if view_limits is not None:
+            for ax, (xlim, ylim) in zip(self.fig.axes, view_limits):
+                ax.set_xlim(xlim)
+                ax.set_ylim(ylim)
 
         self.canvas.draw()
 
