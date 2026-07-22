@@ -775,7 +775,10 @@ class ProgressViewer(QtWidgets.QMainWindow):
         self.canvas.show()
         plot_splitter.addWidget(self.canvas)
         self.vol_plotter = VolumePlotter(self.fig, self.recon_type, self.num_modes, self.num_nonrot, self.num_rot)
-        self.vol_plotter.normvecs = self.settings.value('normvecs', defaultValue=np.identity(3))
+        try:
+            self.vol_plotter.normvecs = np.array(self.settings.value('normvecs', defaultValue=np.identity(3).tolist()))
+        except TypeError:
+            self.vol_plotter.normvecs = np.identity(3)
         self.need_replot = self.vol_plotter.need_replot
 
         # Progress plots figure
@@ -1394,7 +1397,7 @@ class ProgressViewer(QtWidgets.QMainWindow):
         self.settings.setValue('vrange', [self.rangemin.text(), self.rangestr.text()])
         self.settings.setValue('exponent', self.expstr.text())
         self.settings.setValue('cmap', self.color_map.checkedAction().text())
-        self.settings.setValue('normvecs', self.vol_plotter.normvecs)
+        self.settings.setValue('normvecs', self.vol_plotter.normvecs.tolist())
 
     @QtCore.Slot()
     def _fviewer_closed(self):
