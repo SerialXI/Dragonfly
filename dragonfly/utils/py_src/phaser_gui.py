@@ -20,6 +20,36 @@ from matplotlib.figure import Figure
 from . import gui_utils
 from . import class_phaser
 
+
+class PhaserWorker(QtCore.QObject):
+    progress = QtCore.pyqtSignal(str)
+    completed = QtCore.pyqtSignal(object)
+    failed = QtCore.pyqtSignal(str)
+    done = QtCore.pyqtSignal()
+
+    def __init__(self, intens, num_supp, positivity, algorithms, num_runs):
+        super().__init__()
+        self.intens = intens
+        self.num_supp = num_supp
+        self.positivity = positivity
+        self.algorithms = algorithms
+        self.num_runs = num_runs
+
+    @QtCore.pyqtSlot()
+    def run(self):
+        try:
+            phaser = class_phaser.ClassPhaser(self.intens, num_supp=self.num_supp,
+                                              positivity=self.positivity)
+            phaser.phase(self.algorithms, num_runs=self.num_runs,
+                         progress_callback=self.progress.emit)
+        except Exception as exc: # pylint: disable=broad-except
+            self.failed.emit('%s: %s' % (type(exc).__name__, exc))
+        else:
+            self.completed.emit(phaser)
+        finally:
+            self.done.emit()
+
+
 class Phaser2D(QtWidgets.QMainWindow):
     windowClosed = QtCore.pyqtSignal()
 
@@ -30,6 +60,8 @@ class Phaser2D(QtWidgets.QMainWindow):
         self.intens = parent.vol_plotter.vol
         self.curr_intens = None
         self.phaser = None
+        self._phase_thread = None
+        self._phase_worker = None
         self.preprocessed = False
         self.parent.vol_plotter._get_intrad()
         self.intrad = self.parent.vol_plotter.intrad
@@ -96,9 +128,9 @@ class Phaser2D(QtWidgets.QMainWindow):
         self.kwidth.returnPressed.connect(self._preprocess)
         line.addWidget(self.kwidth)
         line.addStretch(1)
-        button = QtWidgets.QPushButton('Preprocess', self)
-        button.clicked.connect(self._preprocess)
-        line.addWidget(button)
+        self.preprocess_button = QtWidgets.QPushButton('Preprocess', self)
+        self.preprocess_button.clicked.connect(self._preprocess)
+        line.addWidget(self.preprocess_button)
 
         line = QtWidgets.QHBoxLayout()
         vbox.addLayout(line)
@@ -108,12 +140,6 @@ class Phaser2D(QtWidgets.QMainWindow):
             str(self.parent.settings.value('phaser2d/num_supp', defaultValue='1000')), self)
         self.num_supp.setFixedWidth(60)
         line.addWidget(self.num_supp)
-        label = QtWidgets.QLabel('Runs:', self)
-        line.addWidget(label)
-        self.num_runs = QtWidgets.QLineEdit(
-            str(self.parent.settings.value('phaser2d/num_runs', defaultValue='1')), self)
-        self.num_runs.setFixedWidth(40)
-        line.addWidget(self.num_runs)
         label = QtWidgets.QLabel('Algorithm:', self)
         line.addWidget(label)
         self.algo_str = QtWidgets.QLineEdit(
@@ -124,14 +150,20 @@ class Phaser2D(QtWidgets.QMainWindow):
         self.pos_flag = QtWidgets.QCheckBox('Positivity', self)
         self.pos_flag.setChecked(self._get_bool_setting('phaser2d/positivity', True))
         line.addWidget(self.pos_flag)
-        button = QtWidgets.QPushButton('Phase', self)
-        button.clicked.connect(self._phase)
-        line.addWidget(button)
+        self.phase_button = QtWidgets.QPushButton('Phase', self)
+        self.phase_button.clicked.connect(self._phase)
+        line.addWidget(self.phase_button)
 
         line = QtWidgets.QHBoxLayout()
         vbox.addLayout(line)
         self.phasing_status = QtWidgets.QLabel('', self)
         line.addWidget(self.phasing_status, stretch=1)
+        label = QtWidgets.QLabel('Runs:', self)
+        line.addWidget(label)
+        self.num_runs = QtWidgets.QLineEdit(
+            str(self.parent.settings.value('phaser2d/num_runs', defaultValue='1')), self)
+        self.num_runs.setFixedWidth(40)
+        line.addWidget(self.num_runs)
         self.show_icalc = QtWidgets.QCheckBox('Show I_calc', self)
         self.show_icalc.stateChanged.connect(self._plot)
         self.show_icalc.setEnabled(False)
@@ -140,9 +172,9 @@ class Phaser2D(QtWidgets.QMainWindow):
         self.show_supp.setChecked(self._get_bool_setting('phaser2d/show_support', False))
         self.show_supp.stateChanged.connect(self._plot)
         line.addWidget(self.show_supp)
-        button = QtWidgets.QPushButton('Save', self)
-        button.clicked.connect(self._save)
-        line.addWidget(button)
+        self.save_button = QtWidgets.QPushButton('Save', self)
+        self.save_button.clicked.connect(self._save)
+        line.addWidget(self.save_button)
 
         self._class_num_changed(self.class_num.value())
         self.show()
@@ -218,17 +250,48 @@ class Phaser2D(QtWidgets.QMainWindow):
         if not self.preprocessed:
             self.phasing_status.setText('Preprocess intensity first')
             return
-        self.phasing_status.setText('')
+        if self._phase_thread is not None:
+            return
+        self.phasing_status.setText('Starting phasing...')
 
         algo = self._get_algo_list()
         num_runs = int(self.num_runs.text())
-        self.phaser = class_phaser.ClassPhaser(self.curr_intens, num_supp=int(self.num_supp.text()),
-                                               positivity=self.pos_flag.isChecked())
-        #self.phaser.phase(algo, qlabel=self.phasing_status)
-        self.phaser.phase(algo, num_runs=num_runs)
+        self._set_phasing_controls_enabled(False)
 
+        self._phase_thread = QtCore.QThread(self)
+        self._phase_worker = PhaserWorker(self.curr_intens.copy(), int(self.num_supp.text()),
+                                          self.pos_flag.isChecked(), algo, num_runs)
+        self._phase_worker.moveToThread(self._phase_thread)
+        self._phase_thread.started.connect(self._phase_worker.run)
+        self._phase_worker.progress.connect(self.phasing_status.setText)
+        self._phase_worker.completed.connect(self._phase_completed)
+        self._phase_worker.failed.connect(self._phase_failed)
+        self._phase_worker.done.connect(self._phase_thread.quit)
+        self._phase_worker.done.connect(self._phase_worker.deleteLater)
+        self._phase_thread.finished.connect(self._phase_thread_finished)
+        self._phase_thread.finished.connect(self._phase_thread.deleteLater)
+        self._phase_thread.start()
+
+    def _phase_completed(self, phaser):
+        self.phaser = phaser
+        self.phasing_status.setText('Phasing complete')
         self.show_icalc.setEnabled(True)
         self._plot()
+
+    def _phase_failed(self, message):
+        self.phasing_status.setText('Phasing failed: %s' % message)
+
+    def _phase_thread_finished(self):
+        self._phase_worker = None
+        self._phase_thread = None
+        self._set_phasing_controls_enabled(True)
+
+    def _set_phasing_controls_enabled(self, enabled):
+        controls = (self.class_num, self.radmin, self.radmax, self.kwidth,
+                    self.preprocess_button, self.num_supp, self.algo_str,
+                    self.pos_flag, self.phase_button, self.num_runs, self.save_button)
+        for control in controls:
+            control.setEnabled(enabled)
 
     def _get_algo_list(self):
         algo = []
@@ -279,6 +342,10 @@ class Phaser2D(QtWidgets.QMainWindow):
         return bool(value)
 
     def closeEvent(self, event):
+        if self._phase_thread is not None and self._phase_thread.isRunning():
+            self.phasing_status.setText('Wait for phasing to finish before closing')
+            event.ignore()
+            return
         self._save_settings()
         self.windowClosed.emit()
         event.accept()

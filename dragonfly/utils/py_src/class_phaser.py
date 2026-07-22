@@ -22,19 +22,20 @@ class ClassPhaser():
         else:
             raise ValueError('Cannot use both num_supp and maxfrac')
 
-    def phase(self, algorithms, qlabel=None, num_runs=1):
+    def phase(self, algorithms, num_runs=1, progress_callback=None):
         if num_runs < 1:
             raise ValueError('Need at least one phasing run')
 
         if num_runs == 1:
-            self._phase_once(algorithms, qlabel=qlabel)
+            self._phase_once(algorithms, progress_callback=progress_callback)
             return
 
         num_valid = 0
         total = None
         support_total = None
         for run in range(num_runs):
-            self._phase_once(algorithms, qlabel=qlabel, run_num=run+1, num_runs=num_runs)
+            self._phase_once(algorithms, progress_callback=progress_callback,
+                             run_num=run+1, num_runs=num_runs)
             if np.isnan(self.current).sum() > 0:
                 sys.stderr.write('NaNs in density, ignoring run %d\n' % (run+1))
                 continue
@@ -62,18 +63,18 @@ class ClassPhaser():
         self.support = support_total / num_valid
         self.num_valid_runs = num_valid
 
-    def _phase_once(self, algorithms, qlabel=None, run_num=None, num_runs=None):
+    def _phase_once(self, algorithms, progress_callback=None, run_num=None, num_runs=None):
         self.current = np.random.random(self.fobs.shape)
         for i, algo in enumerate(algorithms):
             self.run_iteration(algo)
             status = '%d/%d: %s' % (i+1, len(algorithms), algo)
             if run_num is not None and num_runs is not None:
                 status = 'Run %d/%d, %s' % (run_num, num_runs, status)
-            if qlabel is not None:
-                qlabel.setText(status)
+            if progress_callback is not None:
+                progress_callback(status)
             else:
                 sys.stderr.write('\rIteration %s' % status)
-        if qlabel is None:
+        if progress_callback is None:
             sys.stderr.write('\n')
 
         # Shift support center to center of array
