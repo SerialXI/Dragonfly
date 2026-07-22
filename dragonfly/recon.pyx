@@ -555,6 +555,7 @@ def main():
     args = parser.parse_args()
 
     recon = EMCRecon(args.threads)
+    stime = time.time()
 
     itr = Iterate(args.config_file, resume=args.resume)
     itr.params.num_iter = args.niter
@@ -566,10 +567,12 @@ def main():
     # Save initial model guess before first iteration
     if st == 1 and itr.params.rank == 0:
         recon.save_initial_model()
+    if itr.params.rank == 0:
+        print('Finished setup (%f)' % (time.time() - stime))
     
     for itr.params.iteration in range(st, en):
         active_data_loaded = bool(itr.params.lazy_data and itr.params.iteration == st)
         if not recon.run_iteration(active_data_loaded=active_data_loaded):
             break
-    if itr.params.verbosity > 0:
+    if itr.params.verbosity > 0 and itr.params.rank == 0:
         print('Finished all iterations')
