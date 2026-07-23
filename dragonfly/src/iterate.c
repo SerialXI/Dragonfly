@@ -1,11 +1,11 @@
 #include "iterate.h"
 
-void calc_frame_counts(struct iterate *self) {
+void calc_frame_counts(struct iterate *self, uint8_t *blacklist) {
 	long t, d, detn, dset_num = 0 ;
 	struct dataset *curr = self->dset ;
 	struct detector *cdet ;
 	int *num_data = calloc(self->num_det, sizeof(int)) ;
-	if (self->blacklist == NULL) {
+	if (blacklist == NULL) {
 		fprintf(stderr, "Need to generate an empty blacklist before calculating frame counts\n") ;
 		free(num_data) ;
 		return ;
@@ -28,7 +28,7 @@ void calc_frame_counts(struct iterate *self) {
 		
 		if (curr->ftype == SPARSE) {
 			for (d = 0 ; d < curr->num_data ; ++d) {
-				if (self->blacklist[curr->num_offset + d])
+				if (blacklist[curr->num_offset + d])
 					continue ;
 				for (t = 0 ; t < curr->ones[d] ; ++t)
 				if (cdet->raw_mask[curr->place_ones[curr->ones_accum[d] + t]] < 1)
@@ -44,7 +44,7 @@ void calc_frame_counts(struct iterate *self) {
 		}
 		else if (curr->ftype == DENSE_INT) {
 			for (d = 0 ; d < curr->num_data ; ++d) {
-				if (self->blacklist[curr->num_offset + d])
+				if (blacklist[curr->num_offset + d])
 					continue ;
 				for (t = 0 ; t < curr->num_pix ; ++t)
 					self->fcounts[curr->num_offset + d] += curr->int_frames[d*curr->num_pix + t] ;
@@ -55,7 +55,7 @@ void calc_frame_counts(struct iterate *self) {
 		}
 		else if (curr->ftype == DENSE_DOUBLE) {
 			for (d = 0 ; d < curr->num_data ; ++d) {
-				if (self->blacklist[curr->num_offset + d])
+				if (blacklist[curr->num_offset + d])
 					continue ;
 				for (t = 0 ; t < curr->num_pix ; ++t)
 					self->fcounts[curr->num_offset + d] += curr->frames[d*curr->num_pix + t] ;
@@ -74,11 +74,11 @@ void calc_frame_counts(struct iterate *self) {
 	free(num_data) ;
 }
 
-void calc_frame_counts_partial(struct iterate *self, int rank, int num_proc, int *num_data) {
+void calc_frame_counts_partial(struct iterate *self, int rank, int num_proc, int *num_data, uint8_t *blacklist) {
 	long t, d, detn, dset_num = 0 ;
 	struct dataset *curr = self->dset ;
 	struct detector *cdet ;
-	if (self->blacklist == NULL) {
+	if (blacklist == NULL) {
 		fprintf(stderr, "Need to generate an empty blacklist before calculating frame counts\n") ;
 		return ;
 	}
@@ -106,7 +106,7 @@ void calc_frame_counts_partial(struct iterate *self, int rank, int num_proc, int
 		
 		if (curr->ftype == SPARSE) {
 			for (d = 0 ; d < curr->num_data ; ++d) {
-				if (self->blacklist[curr->num_offset + d])
+				if (blacklist[curr->num_offset + d])
 					continue ;
 				for (t = 0 ; t < curr->ones[d] ; ++t)
 				if (cdet->raw_mask[curr->place_ones[curr->ones_accum[d] + t]] < 1)
@@ -122,7 +122,7 @@ void calc_frame_counts_partial(struct iterate *self, int rank, int num_proc, int
 		}
 		else if (curr->ftype == DENSE_INT) {
 			for (d = 0 ; d < curr->num_data ; ++d) {
-				if (self->blacklist[curr->num_offset + d])
+				if (blacklist[curr->num_offset + d])
 					continue ;
 				for (t = 0 ; t < curr->num_pix ; ++t)
 					self->fcounts[curr->num_offset + d] += curr->int_frames[d*curr->num_pix + t] ;
@@ -133,7 +133,7 @@ void calc_frame_counts_partial(struct iterate *self, int rank, int num_proc, int
 		}
 		else if (curr->ftype == DENSE_DOUBLE) {
 			for (d = 0 ; d < curr->num_data ; ++d) {
-				if (self->blacklist[curr->num_offset + d])
+				if (blacklist[curr->num_offset + d])
 					continue ;
 				for (t = 0 ; t < curr->num_pix ; ++t)
 					self->fcounts[curr->num_offset + d] += curr->frames[d*curr->num_pix + t] ;
@@ -167,10 +167,14 @@ void calc_beta(double start, struct iterate *self) {
 	}
 }
 
-void calc_sum_fact(struct iterate *self) {
+void calc_sum_fact(struct iterate *self, uint8_t *blacklist) {
 	int dset_num = 0, d, t ;
 	struct dataset *curr = self->dset ;
 	struct detector *det ;
+	if (blacklist == NULL) {
+		fprintf(stderr, "Need to generate an empty blacklist before calculating sum_fact\n") ;
+		return ;
+	}
 	
 	if (self->sum_fact == NULL)
 		self->sum_fact = malloc(self->tot_num_data*sizeof(double)) ;
@@ -180,16 +184,22 @@ void calc_sum_fact(struct iterate *self) {
 		det = curr->det ;
 		
 		if (curr->ftype == SPARSE) {
-			for (d = 0 ; d < curr->num_data ; ++d)
-			for (t = 0 ; t < curr->multi[d] ; ++t)
-			if (det->raw_mask[curr->place_multi[curr->multi_accum[d] + t]] < 1)
-				self->sum_fact[curr->num_offset+d] += gsl_sf_lnfact(curr->count_multi[curr->multi_accum[d] + t]) ;
+			for (d = 0 ; d < curr->num_data ; ++d) {
+				if (blacklist[d + curr->num_offset])
+					continue ;
+				for (t = 0 ; t < curr->multi[d] ; ++t)
+				if (det->raw_mask[curr->place_multi[curr->multi_accum[d] + t]] < 1)
+					self->sum_fact[curr->num_offset+d] += gsl_sf_lnfact(curr->count_multi[curr->multi_accum[d] + t]) ;
+			}
 		}
 		else if (curr->ftype == DENSE_INT) {
-			for (d = 0 ; d < curr->num_data ; ++d)
-			for (t = 0 ; t < curr->num_pix ; ++t)
-			if (det->raw_mask[t] < 1)
-				self->sum_fact[curr->num_offset+d] += gsl_sf_lnfact(curr->int_frames[d*curr->num_pix + t]) ;
+			for (d = 0 ; d < curr->num_data ; ++d) {
+				if (blacklist[d + curr->num_offset])
+					continue ;
+				for (t = 0 ; t < curr->num_pix ; ++t)
+				if (det->raw_mask[t] < 1)
+					self->sum_fact[curr->num_offset+d] += gsl_sf_lnfact(curr->int_frames[d*curr->num_pix + t]) ;
+			}
 		}
 		else if (curr->ftype == DENSE_DOUBLE) {
 			for (d = 0 ; d < curr->num_data ; ++d)
@@ -201,10 +211,14 @@ void calc_sum_fact(struct iterate *self) {
 	}
 }
 
-void calc_sum_fact_partial(struct iterate *self, int rank, int num_proc) {
+void calc_sum_fact_partial(struct iterate *self, int rank, int num_proc, uint8_t *blacklist) {
 	int dset_num = 0, d, t ;
 	struct dataset *curr = self->dset ;
 	struct detector *det ;
+	if (blacklist == NULL) {
+		fprintf(stderr, "Need to generate an empty blacklist before calculating sum_fact\n") ;
+		return ;
+	}
 	
 	if (self->sum_fact == NULL)
 		self->sum_fact = malloc(self->tot_num_data*sizeof(double)) ;
@@ -219,16 +233,22 @@ void calc_sum_fact_partial(struct iterate *self, int rank, int num_proc) {
 		det = curr->det ;
 		
 		if (curr->ftype == SPARSE) {
-			for (d = 0 ; d < curr->num_data ; ++d)
-			for (t = 0 ; t < curr->multi[d] ; ++t)
-			if (det->raw_mask[curr->place_multi[curr->multi_accum[d] + t]] < 1)
-				self->sum_fact[curr->num_offset+d] += gsl_sf_lnfact(curr->count_multi[curr->multi_accum[d] + t]) ;
+			for (d = 0 ; d < curr->num_data ; ++d) {
+				if (blacklist[d + curr->num_offset])
+					continue ;
+				for (t = 0 ; t < curr->multi[d] ; ++t)
+				if (det->raw_mask[curr->place_multi[curr->multi_accum[d] + t]] < 1)
+					self->sum_fact[curr->num_offset+d] += gsl_sf_lnfact(curr->count_multi[curr->multi_accum[d] + t]) ;
+			}
 		}
 		else if (curr->ftype == DENSE_INT) {
-			for (d = 0 ; d < curr->num_data ; ++d)
-			for (t = 0 ; t < curr->num_pix ; ++t)
-			if (det->raw_mask[t] < 1)
-				self->sum_fact[curr->num_offset+d] += gsl_sf_lnfact(curr->int_frames[d*curr->num_pix + t]) ;
+			for (d = 0 ; d < curr->num_data ; ++d) {
+				if (blacklist[d + curr->num_offset])
+					continue ;
+				for (t = 0 ; t < curr->num_pix ; ++t)
+				if (det->raw_mask[t] < 1)
+					self->sum_fact[curr->num_offset+d] += gsl_sf_lnfact(curr->int_frames[d*curr->num_pix + t]) ;
+			}
 		}
 		else if (curr->ftype == DENSE_DOUBLE) {
 			for (d = 0 ; d < curr->num_data ; ++d)
@@ -240,12 +260,12 @@ void calc_sum_fact_partial(struct iterate *self, int rank, int num_proc) {
 	}
 }
 
-void calc_powder(struct iterate *self) {
+void calc_powder(struct iterate *self, uint8_t *blacklist) {
 	int dset_num = 0, detn, d, t, pixel ;
 	struct dataset *curr = self->dset ;
 	struct detector *det ;
 	int *nframes = calloc(self->num_det, sizeof(int)) ;
-	if (self->blacklist == NULL) {
+	if (blacklist == NULL) {
 		fprintf(stderr, "Need to generate an empty blacklist before calculating powder\n") ;
 		free(nframes) ;
 		return ;
@@ -265,7 +285,7 @@ void calc_powder(struct iterate *self) {
 			
 			if (curr->ftype == SPARSE) {
 				for (d = 0 ; d < curr->num_data ; ++d) {
-					if (self->blacklist[curr->num_offset + d])
+					if (blacklist[curr->num_offset + d])
 						continue ;
 					nframes[detn]++ ;
 					for (t = 0 ; t < curr->ones[d] ; ++t) {
@@ -282,7 +302,7 @@ void calc_powder(struct iterate *self) {
 			}
 			else if (curr->ftype == DENSE_INT) {
 				for (d = 0 ; d < curr->num_data ; ++d) {
-					if (self->blacklist[curr->num_offset + d])
+					if (blacklist[curr->num_offset + d])
 						continue ;
 					nframes[detn]++ ;
 					for (t = 0 ; t < curr->num_pix ; ++t)
@@ -292,7 +312,7 @@ void calc_powder(struct iterate *self) {
 			}
 			else if (curr->ftype == DENSE_DOUBLE) {
 				for (d = 0 ; d < curr->num_data ; ++d) {
-					if (self->blacklist[curr->num_offset + d])
+					if (blacklist[curr->num_offset + d])
 						continue ;
 					nframes[detn]++ ;
 					for (t = 0 ; t < curr->num_pix ; ++t)
@@ -313,11 +333,11 @@ void calc_powder(struct iterate *self) {
 	free(nframes) ;
 }
 
-void calc_powder_partial(struct iterate *self, int rank, int num_proc, int *nframes) {
+void calc_powder_partial(struct iterate *self, int rank, int num_proc, int *nframes, uint8_t *blacklist) {
 	int dset_num = 0, detn, d, t, pixel ;
 	struct dataset *curr = self->dset ;
 	struct detector *det ;
-	if (self->blacklist == NULL) {
+	if (blacklist == NULL) {
 		fprintf(stderr, "Need to generate an empty blacklist before calculating powder\n") ;
 		return ;
 	}
@@ -342,7 +362,7 @@ void calc_powder_partial(struct iterate *self, int rank, int num_proc, int *nfra
 			
 			if (curr->ftype == SPARSE) {
 				for (d = 0 ; d < curr->num_data ; ++d) {
-					if (self->blacklist[curr->num_offset + d])
+					if (blacklist[curr->num_offset + d])
 						continue ;
 					nframes[detn]++ ;
 					for (t = 0 ; t < curr->ones[d] ; ++t) {
@@ -359,7 +379,7 @@ void calc_powder_partial(struct iterate *self, int rank, int num_proc, int *nfra
 			}
 			else if (curr->ftype == DENSE_INT) {
 				for (d = 0 ; d < curr->num_data ; ++d) {
-					if (self->blacklist[curr->num_offset + d])
+					if (blacklist[curr->num_offset + d])
 						continue ;
 					nframes[detn]++ ;
 					for (t = 0 ; t < curr->num_pix ; ++t)
@@ -369,7 +389,7 @@ void calc_powder_partial(struct iterate *self, int rank, int num_proc, int *nfra
 			}
 			else if (curr->ftype == DENSE_DOUBLE) {
 				for (d = 0 ; d < curr->num_data ; ++d) {
-					if (self->blacklist[curr->num_offset + d])
+					if (blacklist[curr->num_offset + d])
 						continue ;
 					nframes[detn]++ ;
 					for (t = 0 ; t < curr->num_pix ; ++t)
