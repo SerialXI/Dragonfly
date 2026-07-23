@@ -13,7 +13,7 @@ struct params {
 	
 	// Algorithm parameters
 	int beta_period, data_fraction_period, data_fraction_until ;
-	int need_scaling, known_scale, update_scale, lazy_data ;
+	int need_scaling, known_scale, update_scale ;
 	double alpha, beta_jump, beta_factor, beta_config ;
 	double data_fraction, coverage_bias ;
 	//double *beta, *beta_start ;

@@ -38,12 +38,9 @@ struct iterate {
 	double likelihood, mutual_info, rms_change ;
 } ;
 
-void calc_frame_counts(struct iterate*, uint8_t*) ;
-void calc_frame_counts_partial(struct iterate*, int, int, int*, uint8_t*) ;
+void calc_frame_counts(struct iterate*) ;
 void calc_beta(double, struct iterate*) ;
-void calc_sum_fact(struct iterate*, uint8_t*) ;
-void calc_sum_fact_partial(struct iterate*, int, int, uint8_t*) ;
-void calc_powder(struct iterate*, uint8_t*) ;
-void calc_powder_partial(struct iterate*, int, int, int*, uint8_t*) ;
+void calc_sum_fact(struct iterate*) ;
+void calc_powder(struct iterate*) ;
 
 #endif // ITERATE_H

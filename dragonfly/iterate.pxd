@@ -41,13 +41,10 @@ cdef extern from "src/iterate.h" nogil:
         # Aggregate metrics
         double likelihood, mutual_info, rms_change
 
-    void calc_frame_counts(iterate*, uint8_t*)
-    void calc_frame_counts_partial(iterate*, int, int, int*, uint8_t*)
+    void calc_frame_counts(iterate*)
     void calc_beta(double, iterate*)
-    void calc_sum_fact(iterate*, uint8_t*)
-    void calc_sum_fact_partial(iterate*, int, int, uint8_t*)
-    void calc_powder(iterate*, uint8_t*)
-    void calc_powder_partial(iterate*, int, int, int*, uint8_t*)
+    void calc_sum_fact(iterate*)
+    void calc_powder(iterate*)
 
 cdef class Iterate:
     cdef iterate *iter

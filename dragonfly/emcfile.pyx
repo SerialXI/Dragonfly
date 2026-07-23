@@ -25,14 +25,14 @@ cdef class CDataset:
         det (CDetector): Associated detector object. Default None.
     '''
 
-    def __init__(self, fname=None, CDetector det=None, lazy=False):
+    def __init__(self, fname=None, CDetector det=None):
         '''Initialize CDataset object.'''
         self.dset = <dataset*> calloc(1, sizeof(dataset))
         self.dset.det = det.det if det is not None else NULL
         if fname is not None:
-            self.parse(fname, lazy=lazy)
+            self.parse(fname)
 
-    def parse(self, fname, lazy=False):
+    def parse(self, fname):
         '''Parse EMC file.
 
         Args:
@@ -45,13 +45,12 @@ cdef class CDataset:
             raise AttributeError('Set detector before parsing')
         cdef bytes encoded_fname = bytes(fname, 'utf-8')
         cdef int err
-        cdef int lazy_flag = int(lazy)
 
         self.dset.fname = <char*> malloc(len(encoded_fname)+1)
         strcpy(self.dset.fname, encoded_fname)
 
         with nogil:
-            err = c_dset.parse_dataset(self.dset.fname, self.dset.det, self.dset, lazy_flag)
+            err = c_dset.parse_dataset(self.dset.fname, self.dset.det, self.dset)
         if err != 0:
             raise ValueError('Could not parse dataset %s' % fname)
 
@@ -66,54 +65,15 @@ cdef class CDataset:
             curr = curr.next
         curr.next = next_dset.dset
 
-    def load_active_frames(self, blacklist):
-        '''Load sparse binary frames selected by a blacklist.
-
-        This is only needed for datasets parsed with ``lazy=True``. The
-        blacklist may either be local to this dataset with length
-        ``num_data`` or global with length at least ``num_offset + num_data``.
-        Frames with blacklist value 0 are loaded.
-        '''
-        cdef uint8_t[:] blist
-        cdef int err
-
-        arr = np.asarray(blacklist, dtype='u1')
-        if arr.ndim != 1:
-            raise ValueError('blacklist must be a 1D array')
-        if arr.shape[0] == self.dset.num_data:
-            if self.dset.num_offset == 0:
-                blist = arr
-                with nogil:
-                    err = c_dset.load_active_frames(self.dset, &blist[0])
-                if err != 0:
-                    raise ValueError('Could not load active frames')
-                return
-            global_arr = np.ones(self.dset.num_offset + self.dset.num_data, dtype='u1')
-            global_arr[self.dset.num_offset:self.dset.num_offset+self.dset.num_data] = arr
-            blist = global_arr
-        elif arr.shape[0] >= self.dset.num_offset + self.dset.num_data:
-            blist = arr
-        else:
-            raise ValueError('blacklist has wrong length')
-
-        with nogil:
-            err = c_dset.load_active_frames(self.dset, &blist[0])
-        if err != 0:
-            raise ValueError('Could not load active frames')
-
     def free(self):
         '''Free allocated memory for sparse data arrays.'''
         if self.dset.ones != NULL: free(self.dset.ones)
         if self.dset.multi != NULL: free(self.dset.multi)
-        if self.dset.ones_file != NULL: free(self.dset.ones_file)
-        if self.dset.multi_file != NULL: free(self.dset.multi_file)
         if self.dset.place_ones != NULL: free(self.dset.place_ones)
         if self.dset.place_multi != NULL: free(self.dset.place_multi)
         if self.dset.count_multi != NULL: free(self.dset.count_multi)
         if self.dset.ones_accum != NULL: free(self.dset.ones_accum)
         if self.dset.multi_accum != NULL: free(self.dset.multi_accum)
-        if self.dset.ones_accum_file != NULL: free(self.dset.ones_accum_file)
-        if self.dset.multi_accum_file != NULL: free(self.dset.multi_accum_file)
         if self.dset.int_frames != NULL: free(self.dset.int_frames)
         if self.dset.frames != NULL: free(self.dset.frames)
 
@@ -140,10 +100,6 @@ cdef class CDataset:
     def ftype(self):
         '''Returns the frame type (sparse, dense_integer, or dense_double).'''
         return ['sparse', 'dense_integer', 'dense_double'][self.dset.ftype]
-    @property
-    def lazy(self):
-        '''Whether this dataset uses lazy active-frame loading.'''
-        return bool(self.dset.lazy)
     @property
     def has_binary_magic(self):
         '''Whether the binary EMC header contains the EMC magic signature.'''

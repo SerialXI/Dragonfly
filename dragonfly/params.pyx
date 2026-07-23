@@ -56,7 +56,6 @@ cdef class EMCParams:
         self.par.axial_sym = 1
         self.par.save_prob = 0
         self.par.update_scale = 1
-        self.par.lazy_data = 0
         self.par.refine = 0
         self.par.coarse_div = 0
         self.par.fine_div = 0
@@ -150,7 +149,6 @@ cdef class EMCParams:
         self.par.axial_sym = config.getint(section_name, 'axial_sym', fallback=1)
         self.par.save_prob = config.getint(section_name, 'save_prob', fallback=0)
         self.par.update_scale = config.getint(section_name, 'update_scale', fallback=1)
-        self.par.lazy_data = config.getint(section_name, 'lazy_data', fallback=0)
         num_divs = config.get(section_name, 'num_div', fallback='0').split()
         if len(num_divs) > 1:
             self.par.refine = 1
@@ -284,14 +282,6 @@ cdef class EMCParams:
     def update_scale(self, int val):
         '''Set update_scale flag.'''
         self.par.update_scale = val
-    @property
-    def lazy_data(self):
-        '''Whether to load active sparse frames on demand.'''
-        return self.par.lazy_data
-    @lazy_data.setter
-    def lazy_data(self, int val):
-        '''Set lazy_data flag.'''
-        self.par.lazy_data = val
     @property
     def save_prob(self):
         '''Whether to save probabilities.'''
