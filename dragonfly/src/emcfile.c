@@ -242,7 +242,6 @@ static int parse_h5dataset(char *fname, struct dataset *self) {
 
 int parse_dataset(char *fname, struct detector *det, struct dataset *self, int lazy) {
 	int err ;
-	long d, t ;
 	char line[1024], hdfheader[8] = {137, 'H', 'D', 'F', '\r', '\n', 26, '\n'} ;
 	
 	self->det = det ;
@@ -272,35 +271,6 @@ int parse_dataset(char *fname, struct detector *det, struct dataset *self, int l
 	}
 	if (err)
 		return err ;
-	
-	if (lazy)
-		return err ;
-
-	// Calculate mean count in the presence of mask
-	self->mean_count = 0. ;
-	for (d = 0 ; d < self->num_data ; ++d) {
-		if (self->ftype == SPARSE) {
-			for (t = 0 ; t < self->ones[d] ; ++t)
-			if (det->raw_mask[self->place_ones[self->ones_accum[d] + t]] < 1)
-				self->mean_count += 1. ;
-			
-			for (t = 0 ; t < self->multi[d] ; ++t)
-			if (det->raw_mask[self->place_multi[self->multi_accum[d] + t]] < 1)
-				self->mean_count += self->count_multi[self->multi_accum[d] + t] ;
-		}
-		else if (self->ftype == DENSE_INT) {
-			for (t = 0 ; t < self->num_pix ; ++t)
-			if (det->raw_mask[t] < 1)
-				self->mean_count += self->int_frames[d*self->num_pix + t] ;
-		}
-		else if (self->ftype == DENSE_DOUBLE) {
-			for (t = 0 ; t < self->num_pix ; ++t)
-			if (det->raw_mask[t] < 1)
-				self->mean_count += self->frames[d*self->num_pix + t] ;
-		}
-	}
-	
-	self->mean_count /= self->num_data ;
 	
 	return err ;
 }
