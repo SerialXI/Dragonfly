@@ -21,12 +21,6 @@ from .quaternion cimport Quaternion
 from .params cimport EMCParams
 
 
-def _parse_dataset_file(args):
-    cdef str fname = args[0]
-    cdef CDetector det = args[1]
-    return CDataset(fname, det)
-
-
 cdef class Iterate:
     '''Class managing state for each EMC iteration.
 
@@ -228,18 +222,18 @@ cdef class Iterate:
         num_workers = min(len(binary_indices), openmp.omp_get_max_threads())
         if num_workers > 1:
             with ThreadPoolExecutor(max_workers=num_workers) as executor:
-                futures = {i: executor.submit(_parse_dataset_file, args[i])
+                futures = {i: executor.submit(CDataset, *args[i])
                            for i in binary_indices}
                 # Direct HDF5 calls stay on this thread; HDF5 builds are not
                 # necessarily thread-safe.
                 for i in range(len(fnames)):
                     if i not in futures:
-                        parsed[i] = _parse_dataset_file(args[i])
+                        parsed[i] = CDataset(*args[i])
                 for i in binary_indices:
                     parsed[i] = futures[i].result()
         else:
             for i in range(len(fnames)):
-                parsed[i] = _parse_dataset_file(args[i])
+                parsed[i] = CDataset(*args[i])
 
         for i in range(len(parsed) - 1):
             curr = parsed[i]
