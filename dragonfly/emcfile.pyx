@@ -43,10 +43,16 @@ cdef class CDataset:
         '''
         if self.dset.det == NULL:
             raise AttributeError('Set detector before parsing')
-        self.dset.fname = <char*> malloc(len(fname)+1)
-        strcpy(self.dset.fname, bytes(fname, 'utf-8'))
+        cdef bytes encoded_fname = bytes(fname, 'utf-8')
+        cdef int err
+        cdef int lazy_flag = int(lazy)
 
-        if c_dset.parse_dataset(self.dset.fname, self.dset.det, self.dset, int(lazy)) != 0:
+        self.dset.fname = <char*> malloc(len(encoded_fname)+1)
+        strcpy(self.dset.fname, encoded_fname)
+
+        with nogil:
+            err = c_dset.parse_dataset(self.dset.fname, self.dset.det, self.dset, lazy_flag)
+        if err != 0:
             raise ValueError('Could not parse dataset %s' % fname)
 
     def append(self, CDataset next_dset):
@@ -69,6 +75,7 @@ cdef class CDataset:
         Frames with blacklist value 0 are loaded.
         '''
         cdef uint8_t[:] blist
+        cdef int err
 
         arr = np.asarray(blacklist, dtype='u1')
         if arr.ndim != 1:
@@ -76,7 +83,9 @@ cdef class CDataset:
         if arr.shape[0] == self.dset.num_data:
             if self.dset.num_offset == 0:
                 blist = arr
-                if c_dset.load_active_frames(self.dset, &blist[0]) != 0:
+                with nogil:
+                    err = c_dset.load_active_frames(self.dset, &blist[0])
+                if err != 0:
                     raise ValueError('Could not load active frames')
                 return
             global_arr = np.ones(self.dset.num_offset + self.dset.num_data, dtype='u1')
@@ -87,7 +96,9 @@ cdef class CDataset:
         else:
             raise ValueError('blacklist has wrong length')
 
-        if c_dset.load_active_frames(self.dset, &blist[0]) != 0:
+        with nogil:
+            err = c_dset.load_active_frames(self.dset, &blist[0])
+        if err != 0:
             raise ValueError('Could not load active frames')
 
     def free(self):
