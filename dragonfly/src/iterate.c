@@ -209,3 +209,221 @@ void calc_powder(struct iterate *self) {
 	
 	free(nframes) ;
 }
+
+void free_rel_quat(struct iterate *iter) {
+    int d ;
+    for (d = 0 ; d < iter->tot_num_data ; ++d) {
+        if (iter->rel_quat != NULL)
+            free(iter->rel_quat[d]) ;
+        if (iter->rel_prob != NULL)
+            free(iter->rel_prob[d]) ;
+    }
+    free(iter->rel_quat) ;
+    free(iter->rel_prob) ;
+    free(iter->num_rel_quat) ;
+    iter->rel_quat = NULL ;
+    iter->rel_prob = NULL ;
+    iter->num_rel_quat = NULL ;
+}
+
+static int read_rel_quat_h5(hid_t file, int num_rot_coarse, int parse_prob, struct iterate *iter) {
+    int d, k, value, status ;
+    hid_t dset, dspace, dtype ;
+    hsize_t num_data ;
+    const char *keys[] = {"params/num_div", "params/num_rot", "params/num_modes", "params/nonrot_modes"} ;
+    int expected[] = {iter->par->coarse_div, num_rot_coarse, iter->par->num_modes, iter->par->nonrot_modes} ;
+
+    if (H5Lexists(file, "params", H5P_DEFAULT) > 0)
+    for (k = 0 ; k < 4 ; ++k) {
+        if (H5Lexists(file, keys[k], H5P_DEFAULT) <= 0)
+            continue ;
+        dset = H5Dopen2(file, keys[k], H5P_DEFAULT) ;
+        status = H5Dread(dset, H5T_NATIVE_INT, H5S_ALL, H5S_ALL, H5P_DEFAULT, &value) ;
+        H5Dclose(dset) ;
+        if (status < 0 || value != expected[k]) {
+            fprintf(stderr, "Coarse checkpoint does not match refinement %s\n", keys[k]) ;
+            return 1 ;
+        }
+    }
+
+    int sparse = H5Lexists(file, "probabilities", H5P_DEFAULT) > 0 ;
+    if (sparse) {
+        dset = H5Dopen2(file, "probabilities/num_rot", H5P_DEFAULT) ;
+        if (dset < 0)
+            return 1 ;
+        status = H5Dread(dset, H5T_NATIVE_INT, H5S_ALL, H5S_ALL, H5P_DEFAULT, &value) ;
+        H5Dclose(dset) ;
+        if (status < 0 || value != num_rot_coarse) {
+            fprintf(stderr, "Rotation sampling in probs file does not match num_rot_coarse\n") ;
+            return 1 ;
+        }
+    }
+
+    const char *paths[] = {"probabilities/place", "probabilities/prob"} ;
+    for (k = 0 ; k < (sparse && parse_prob ? 2 : 1) ; ++k) {
+        dset = H5Dopen2(file, sparse ? paths[k] : "orientations", H5P_DEFAULT) ;
+        if (dset < 0)
+            return 1 ;
+        dspace = H5Dget_space(dset) ;
+        if (H5Sget_simple_extent_ndims(dspace) != 1 ||
+                H5Sget_simple_extent_dims(dspace, &num_data, NULL) < 0 || num_data != (hsize_t) iter->tot_num_data) {
+            fprintf(stderr, "Number of frames in coarse checkpoint does not match %d\n", iter->tot_num_data) ;
+            H5Sclose(dspace) ;
+            H5Dclose(dset) ;
+            return 1 ;
+        }
+
+        if (!sparse) {
+            int *buffer = malloc(num_data * sizeof(int)) ;
+            status = H5Dread(dset, H5T_NATIVE_INT, H5S_ALL, H5S_ALL, H5P_DEFAULT, buffer) ;
+            if (status >= 0)
+            for (d = 0 ; d < iter->tot_num_data ; ++d) {
+                iter->num_rel_quat[d] = 1 ;
+                iter->rel_quat[d] = malloc(sizeof(int)) ;
+                iter->rel_quat[d][0] = buffer[d] ;
+                if (parse_prob) {
+                    iter->rel_prob[d] = malloc(sizeof(double)) ;
+                    iter->rel_prob[d][0] = 1. ;
+                }
+            }
+            free(buffer) ;
+        }
+        else {
+            hvl_t *buffer = calloc(num_data, sizeof(hvl_t)) ;
+            dtype = H5Tvlen_create(k == 0 ? H5T_NATIVE_INT : H5T_NATIVE_DOUBLE) ;
+            status = H5Dread(dset, dtype, H5S_ALL, H5S_ALL, H5P_DEFAULT, buffer) ;
+            if (status >= 0)
+            for (d = 0 ; d < iter->tot_num_data ; ++d) {
+                if (k == 0) {
+                    iter->num_rel_quat[d] = buffer[d].len ;
+                    if (buffer[d].len > 0) {
+                        iter->rel_quat[d] = malloc(buffer[d].len * sizeof(int)) ;
+                        memcpy(iter->rel_quat[d], buffer[d].p, buffer[d].len * sizeof(int)) ;
+                    }
+                }
+                else {
+                    if (buffer[d].len != (size_t) iter->num_rel_quat[d]) {
+                        fprintf(stderr, "Probability count does not match orientations for frame %d\n", d) ;
+                        status = -1 ;
+                        break ;
+                    }
+                    if (buffer[d].len > 0) {
+                        iter->rel_prob[d] = malloc(buffer[d].len * sizeof(double)) ;
+                        memcpy(iter->rel_prob[d], buffer[d].p, buffer[d].len * sizeof(double)) ;
+                    }
+                }
+            }
+            H5Dvlen_reclaim(dtype, dspace, H5P_DEFAULT, buffer) ;
+            free(buffer) ;
+            H5Tclose(dtype) ;
+        }
+        H5Sclose(dspace) ;
+        H5Dclose(dset) ;
+        if (status < 0)
+            return 1 ;
+    }
+    return 0 ;
+}
+
+static int read_rel_quat_binary(FILE *fp, int num_rot_coarse, int parse_prob, struct iterate *iter) {
+    int d, num_data, num_rot ;
+    if (fread(&num_data, sizeof(int), 1, fp) != 1 || fread(&num_rot, sizeof(int), 1, fp) != 1)
+        return 1 ;
+    if (num_data != iter->tot_num_data || num_rot != num_rot_coarse) {
+        fprintf(stderr, "Frame count or rotation sampling in probs file does not match refinement\n") ;
+        return 1 ;
+    }
+    if (fseek(fp, 1024, SEEK_SET) != 0 ||
+            fread(iter->num_rel_quat, sizeof(int), num_data, fp) != (size_t) num_data)
+        return 1 ;
+    for (d = 0 ; d < num_data ; ++d) {
+        int n = iter->num_rel_quat[d] ;
+        if (n < 0)
+            return 1 ;
+        if (n == 0)
+            continue ;
+        iter->rel_quat[d] = malloc(n * sizeof(int)) ;
+        if (fread(iter->rel_quat[d], sizeof(int), n, fp) != (size_t) n)
+            return 1 ;
+    }
+    if (parse_prob)
+    for (d = 0 ; d < num_data ; ++d) {
+        int n = iter->num_rel_quat[d] ;
+        if (n == 0)
+            continue ;
+        iter->rel_prob[d] = malloc(n * sizeof(double)) ;
+        if (fread(iter->rel_prob[d], sizeof(double), n, fp) != (size_t) n)
+            return 1 ;
+    }
+    return 0 ;
+}
+
+static int restrict_rel_quat(int num_rot_coarse, int parse_prob, struct iterate *iter) {
+    int d, t, i, n, index, rot ;
+    int num_modes = iter->par->num_modes ;
+    for (d = 0 ; d < iter->tot_num_data ; ++d) {
+        n = 0 ;
+        for (t = 0 ; t < iter->num_rel_quat[d] ; ++t) {
+            index = iter->rel_quat[d][t] ;
+            if (index < 0 || index >= num_rot_coarse * num_modes)
+                continue ;
+            // Saved indices include modes; refinement restricts only orientations.
+            rot = index / num_modes ;
+            i = n ;
+            if (num_modes > 1)
+            for (i = 0 ; i < n ; ++i)
+                if (iter->rel_quat[d][i] == rot)
+                    break ;
+            if (i == n) {
+                iter->rel_quat[d][n] = rot ;
+                if (parse_prob)
+                    iter->rel_prob[d][n] = iter->rel_prob[d][t] ;
+                n++ ;
+            }
+            else if (parse_prob)
+                iter->rel_prob[d][i] += iter->rel_prob[d][t] ;
+        }
+        iter->num_rel_quat[d] = n ;
+        if (n == 0 && !iter->static_blacklist[d] && iter->par->nonrot_modes == 0) {
+            fprintf(stderr, "No coarse orientations for active frame %d\n", d) ;
+            return 1 ;
+        }
+    }
+    return 0 ;
+}
+
+int parse_rel_quat(const char *fname, int num_rot_coarse, int parse_prob, struct iterate *iter) {
+    FILE *fp = fopen(fname, "rb") ;
+    if (fp == NULL) {
+        fprintf(stderr, "Could not open rel_quat file %s\n", fname) ;
+        return 1 ;
+    }
+    // Keep the previous restrictions if the new checkpoint cannot be read.
+    struct iterate data = *iter ;
+    data.num_rel_quat = calloc(iter->tot_num_data, sizeof(int)) ;
+    data.rel_quat = calloc(iter->tot_num_data, sizeof(int*)) ;
+    data.rel_prob = parse_prob ? calloc(iter->tot_num_data, sizeof(double*)) : NULL ;
+    int status ;
+    if (H5Fis_hdf5(fname) > 0) {
+        fclose(fp) ;
+        hid_t file = H5Fopen(fname, H5F_ACC_RDONLY, H5P_DEFAULT) ;
+        status = file < 0 ? 1 : read_rel_quat_h5(file, num_rot_coarse, parse_prob, &data) ;
+        if (file >= 0)
+            H5Fclose(file) ;
+    }
+    else {
+        status = read_rel_quat_binary(fp, num_rot_coarse, parse_prob, &data) ;
+        fclose(fp) ;
+    }
+    if (status == 0)
+        status = restrict_rel_quat(num_rot_coarse, parse_prob, &data) ;
+    if (status != 0) {
+        free_rel_quat(&data) ;
+        return 1 ;
+    }
+    free_rel_quat(iter) ;
+    iter->num_rel_quat = data.num_rel_quat ;
+    iter->rel_quat = data.rel_quat ;
+    iter->rel_prob = data.rel_prob ;
+    return 0 ;
+}

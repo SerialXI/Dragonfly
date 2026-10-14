@@ -47,7 +47,7 @@ ext_modules = [
         depends=['dragonfly/src/quaternion.h', 'dragonfly/quaternion.pxd'],
         language='c', extra_compile_args=compile_args, extra_link_args=link_args),
     Extension(name='dragonfly.iterate', sources=['dragonfly/iterate.pyx', 'dragonfly/src/iterate.c', 'dragonfly/src/emcfile.c'],
-        depends=['dragonfly/src/iterate.h', 'dragonfly/src/emcfile.h', 'dragonfly/iterate.pxd'],
+        depends=['dragonfly/src/iterate.h', 'dragonfly/src/emcfile.h', 'dragonfly/src/quaternion.h', 'dragonfly/src/params.h', 'dragonfly/iterate.pxd'],
         language='c', extra_compile_args=compile_args, extra_link_args=link_args),
     Extension(name='dragonfly.params', sources=['dragonfly/params.pyx'],
         depends=['dragonfly/src/params.h', 'dragonfly/params.pxd'],

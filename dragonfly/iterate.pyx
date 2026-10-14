@@ -151,6 +151,7 @@ cdef class Iterate:
             bgscale_file = config.get_filename(section_name, 'bgscale_file')
         except configparser.NoOptionError:
             bgscale_file = ''
+        probs_file = config.get_filename(section_name, 'probs_file', fallback='')
         if resume:
             try:
                 fp = open(param.log_fname, 'r')
@@ -168,6 +169,8 @@ cdef class Iterate:
                     self.params.start_iter = last_iter + 1
                     model_file = op.join(param.output_folder, 'output_%.3d.h5' % last_iter)
                     scale_file = op.join(param.output_folder, 'output_%.3d.h5' % last_iter)
+                    if self.iter.par.refine and probs_file == '':
+                        probs_file = model_file
                     print('Resuming from iteration', self.params.start_iter)
 
         if self.iter.par.need_scaling == 1:
@@ -180,6 +183,8 @@ cdef class Iterate:
             blacklist_file = ''
         self.parse_blacklist(blacklist_file, sel_string)
         self.refresh_data_stats()
+        if self.iter.par.refine:
+            self.parse_rel_quat(probs_file)
         if (self.iter.par.need_scaling == 1 and self.iter.par.data_fraction < 1.
                 and scale_file == ''):
             self.initialize_stochastic_scale()
@@ -191,7 +196,7 @@ cdef class Iterate:
             self.load_previous_blacklist(model_file)
 
         qmax = max([det.qmax() for det in dets])
-        model = Model(self.calculate_size(qmax), self.iter.par.num_modes, rtype)
+        model = Model(self.calculate_size(qmax), self.iter.par.num_modes + self.iter.par.nonrot_modes, rtype)
         model_mean = self.mean_count[0] / (self.dets[0].raw_mask==0).sum() * 2.
         model.allocate(model_file, model_mean, fixed_seed=bool(param.fixed_seed))
         self.set_model(model)
@@ -447,6 +452,44 @@ cdef class Iterate:
             if self.iter.blacklist[d] != 0:
                 self.iter.num_blacklist += 1
         return True
+
+    def parse_rel_quat(self, fname, parse_prob=False):
+        '''Load coarse restrictions from HDF5 or legacy binary output.
+
+        If parse_prob is true, also load probabilities, summed over modes.
+        '''
+        cdef Quaternion coarse
+        cdef bytes encoded_fname
+        cdef int[:] mapping_view
+        cdef int *new_mapping = NULL
+
+        if not fname:
+            raise ValueError('Need a coarse checkpoint in probs_file or resume to do refinement')
+        if self.iter == NULL or self.iter.quat == NULL or self.iter.tot_num_data == 0:
+            raise ValueError('Set data and fine quaternions before loading refinement restrictions')
+        if self.iter.par.coarse_div < 1:
+            raise ValueError('Set a positive coarse_div before loading refinement restrictions')
+        coarse = Quaternion(self.iter.par.coarse_div)
+        try:
+            if self.quat.icosahedral_flag:
+                coarse.reduce_icosahedral()
+            elif self.quat.octahedral_flag:
+                coarse.reduce_octahedral()
+            mapping = self.quat.voronoi_subset(self.iter.par.coarse_div, coarse)
+            mapping_view = mapping
+            new_mapping = <int*> malloc(self.iter.quat.num_rot * sizeof(int))
+            if new_mapping == NULL:
+                raise MemoryError('Could not allocate refinement mapping')
+            memcpy(new_mapping, &mapping_view[0], self.iter.quat.num_rot * sizeof(int))
+            encoded_fname = fname.encode('utf-8')
+            if c_iterate.parse_rel_quat(encoded_fname, coarse.num_rot, parse_prob, self.iter) != 0:
+                raise ValueError('Could not load coarse orientation restrictions from %s' % fname)
+            free(self.iter.quat_mapping)
+            self.iter.quat_mapping = new_mapping
+            new_mapping = NULL
+        finally:
+            free(new_mapping)
+            coarse.free()
 
     def parse_scale(self, fname, bg=False):
         '''Parse or initialize scale factors.
@@ -728,19 +771,11 @@ cdef class Iterate:
         if self.iter.static_blacklist != NULL: free(self.iter.static_blacklist)
         if self.iter.last_selected != NULL: free(self.iter.last_selected)
         if self.iter.quat_mapping != NULL: free(self.iter.quat_mapping)
-        if self.iter.num_rel_quat != NULL: free(self.iter.num_rel_quat)
         if self.iter.det_mapping != NULL: free(self.iter.det_mapping)
         if self.iter.rescale != NULL: free(self.iter.rescale)
         if self.iter.mean_count != NULL: free(self.iter.mean_count)
 
-        if self.iter.rel_quat != NULL:
-            for d in range(iter.tot_num_data):
-                free(self.iter.rel_quat[d])
-            free(self.iter.rel_quat)
-        if self.iter.rel_prob != NULL:
-            for d in range(iter.tot_num_data):
-                free(self.iter.rel_prob[d])
-            free(self.iter.rel_prob)
+        c_iterate.free_rel_quat(self.iter)
         self.iter = NULL
 
     def _gen_detlist(self):
@@ -894,6 +929,22 @@ cdef class Iterate:
         retval.free()
         retval.quat = self.iter.quat
         return retval
+    @property
+    def rel_quat(self):
+        '''Allowed coarse orientation indices per frame for refinement.'''
+        if self.iter.rel_quat == NULL:
+            return
+        return [np.asarray(<int[:self.iter.num_rel_quat[d]]>self.iter.rel_quat[d])
+                if self.iter.num_rel_quat[d] > 0 else np.empty(0, dtype='i4')
+                for d in range(self.iter.tot_num_data)]
+    @property
+    def rel_prob(self):
+        '''Optional coarse probabilities, summed over rotating modes.'''
+        if self.iter.rel_prob == NULL:
+            return
+        return [np.asarray(<double[:self.iter.num_rel_quat[d]]>self.iter.rel_prob[d])
+                if self.iter.num_rel_quat[d] > 0 else np.empty(0, dtype='f8')
+                for d in range(self.iter.tot_num_data)]
     @property
     def data(self):
         '''Dataset.'''

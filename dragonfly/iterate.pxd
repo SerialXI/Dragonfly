@@ -45,6 +45,8 @@ cdef extern from "src/iterate.h" nogil:
     void calc_beta(double, iterate*)
     void calc_sum_fact(iterate*)
     void calc_powder(iterate*)
+    int parse_rel_quat(const char*, int, int, iterate*)
+    void free_rel_quat(iterate*)
 
 cdef class Iterate:
     cdef iterate *iter

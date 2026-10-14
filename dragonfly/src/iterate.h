@@ -42,5 +42,7 @@ void calc_frame_counts(struct iterate*) ;
 void calc_beta(double, struct iterate*) ;
 void calc_sum_fact(struct iterate*) ;
 void calc_powder(struct iterate*) ;
+int parse_rel_quat(const char*, int, int, struct iterate*) ;
+void free_rel_quat(struct iterate*) ;
 
 #endif // ITERATE_H
