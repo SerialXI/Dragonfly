@@ -160,6 +160,9 @@ The simulator outputs photon data in sparse format with three arrays:
 This sparse format is efficient for high-resolution SPI where most
 pixels receive zero or one photon.
 
+See :doc:`emc-format` for the binary block layout, historical format diagram,
+header extensions, and HDF5 representation.
+
 Pipeline Flow
 -------------
 

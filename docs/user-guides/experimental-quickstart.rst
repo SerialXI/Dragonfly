@@ -74,6 +74,8 @@ This creates an EMC file in the ``data`` folder. For other options, run::
 The EMC file header contains the total pixel count from the configuration file,
 so the ``[parameters]`` section must be complete before converting data.
 
+See :doc:`emc-format` for the photon data layout and header fields.
+
 View your data using the frame viewer::
 
     dragonfly.frameviewer

@@ -14,6 +14,7 @@ using MPI and OpenMP.
    user-guides/simulator
    user-guides/config
    user-guides/experimental-quickstart
+   user-guides/emc-format
    user-guides/autoplot
    user-guides/frameviewer
    user-guides/faq
