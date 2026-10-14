@@ -88,8 +88,6 @@ cdef class Quaternion:
         elif rtype =='3d':
             num_div = config.get(section_name, 'num_div', fallback='0').split()
             self.generate_3d(int(num_div[0]))
-            if len(num_div) == 2:
-                self.voronoi_subset(int(num_div[1]))
 
             point_group = config.get(section_name, 'point_group', fallback='1')
             if point_group == 'A5':
@@ -286,11 +284,12 @@ cdef class Quaternion:
         else:
             return self.num_rot
 
-    def voronoi_subset(self, int coarse_num_div):
+    def voronoi_subset(self, int coarse_num_div, Quaternion coarse=None):
         '''Select subset using Voronoi cells.
 
         Args:
             coarse_num_div (int): Coarse division level.
+            coarse (Quaternion): Optional pre-generated coarse grid.
 
         Returns:
             :py:class:`numpy.ndarray`: Nearest coarse division indices.
@@ -298,17 +297,25 @@ cdef class Quaternion:
         if self.num_rot == 0:
             print('Generate fine quaternions first')
             return
-        cdef c_quat.quaternion* coarse
-        coarse = <c_quat.quaternion*> calloc(1, sizeof(c_quat.quaternion))
-        coarse.num_div = coarse_num_div
-        c_quat.quat_gen(coarse_num_div, coarse)
-
-        nearest = np.empty(self.num_rot, dtype='i4')
-        cdef int[:] nearest_view = nearest
-        c_quat.voronoi_subset(coarse, self.quat, &nearest_view[0])
-
-        free(coarse.quats)
-        free(coarse)
+        if coarse_num_div < 1:
+            raise ValueError('coarse_num_div must be positive')
+        cdef bint generated = coarse is None
+        cdef int[:] nearest_view
+        if generated:
+            coarse = Quaternion(coarse_num_div)
+            if self.icosahedral_flag:
+                coarse.reduce_icosahedral()
+            elif self.octahedral_flag:
+                coarse.reduce_octahedral()
+        elif coarse.quat == NULL or coarse.quat.quats == NULL:
+            raise ValueError('Generate coarse quaternions before mapping')
+        try:
+            nearest = np.empty(self.num_rot, dtype='i4')
+            nearest_view = nearest
+            c_quat.voronoi_subset(coarse.quat, self.quat, &nearest_view[0])
+        finally:
+            if generated:
+                coarse.free()
 
         return nearest
 
