@@ -67,7 +67,7 @@ void gradient_d(struct max_data *common, uint8_t *mask, double *scale, double *g
 						continue ;
 					
 					// For refinement, check if frame should be processed
-					if (param->refine) {
+					if (param->refine && mode < param->num_modes) {
 						ind = -1 ;
 						for (t = 0 ; t < iter->num_rel_quat[d] ; ++t)
 						if (iter->quat_mapping[rotind] == iter->rel_quat[d][t]) {

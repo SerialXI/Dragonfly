@@ -71,10 +71,10 @@ double calc_psum_r(int r, struct max_data *priv, struct max_data *common) {
 				continue ;
 			
 			// For refinement, check if frame should be processed
-			if (param->refine) {
+			if (param->refine && mode < param->num_modes) {
 				ind = -1 ;
 				for (t = 0 ; t < iter->num_rel_quat[d] ; ++t)
-				if (iter->quat_mapping[r*param->num_proc+param->rank] == iter->rel_quat[d][t]) {
+				if (iter->quat_mapping[rotind] == iter->rel_quat[d][t]) {
 					ind = t ;
 					break ;
 				}
@@ -168,7 +168,7 @@ void update_tomogram_nobg(int r, struct max_data *priv, struct max_data *common)
 				continue ;
 			
 			// For refinement, check if frame should be processed
-			if (param->refine) {
+			if (param->refine && rotind < iter->quat->num_rot) {
 				ind = -1 ;
 				for (t = 0 ; t < iter->num_rel_quat[d] ; ++t)
 				if (iter->quat_mapping[rotind] == iter->rel_quat[d][t]) {
@@ -276,7 +276,7 @@ void gradient_rt(int r, struct max_data *priv, double **views, double **gradient
 				continue ;
 			
 			// For refinement, check if frame should be processed
-			if (param->refine) {
+			if (param->refine && rotind < iter->quat->num_rot) {
 				ind = -1 ;
 				for (t = 0 ; t < iter->num_rel_quat[d] ; ++t)
 				if (iter->quat_mapping[rotind] == iter->rel_quat[d][t]) {
