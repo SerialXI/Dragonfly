@@ -18,7 +18,7 @@ Convenience utility that runs the simulator pipeline sequentially:
     * :func:`make_densities <dragonfly.utils.make_densities.make_dens>`
     * :func:`make_intensities <dragonfly.utils.make_intensities.make_intens>`
     * :func:`make_detector <dragonfly.utils.make_detector.make_detector>`
-    * :func:`make_data <dragonfly.utils.make_data.make_data_cdef>`
+    * :func:`make_data <dragonfly.utils.make_data.make_data>`
 
     Usage::
 
@@ -124,7 +124,8 @@ make_data
 
 Simulates photon diffraction patterns from 3D intensity volume.
 
-.. py:function:: dragonfly.utils.make_data.make_data_cdef(config_fname, yes=False, verbose=False)
+.. py:function:: dragonfly.utils.make_data.make_data(config_fname, yes=False, verbose=False)
+   :noindex:
 
 
     Generate simulated photon data from configuration file.
