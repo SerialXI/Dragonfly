@@ -150,10 +150,16 @@ cdef class EMCParams:
         self.par.save_prob = config.getint(section_name, 'save_prob', fallback=0)
         self.par.update_scale = config.getint(section_name, 'update_scale', fallback=1)
         num_divs = config.get(section_name, 'num_div', fallback='0').split()
+        if len(num_divs) > 2:
+            raise ValueError('num_div must contain one or two values')
         if len(num_divs) > 1:
             self.par.refine = 1
             self.par.fine_div = int(num_divs[0])
             self.par.coarse_div = int(num_divs[1])
+            if self.par.rtype != c_params.RECON3D:
+                raise ValueError('Orientation refinement is only available for 3D reconstructions')
+            if self.par.coarse_div < 1 or self.par.fine_div < self.par.coarse_div:
+                raise ValueError('Refinement requires fine num_div >= coarse num_div > 0')
             print('Doing refinement from num_div = %d -> %d\n' % (self.par.coarse_div, self.par.fine_div))
         
         self.par.fixed_seed = config.getint(section_name, 'fixed_seed', fallback=0)
