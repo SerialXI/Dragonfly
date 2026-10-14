@@ -6,8 +6,7 @@ The parameters module stores reconstruction parameters.
 Configuration
 -------------
 
-Load parameters from a configuration file, which should be the most common way to
-set the various parameters:
+Load parameters from a configuration file, which should be the most common way to set the various parameters:
 
 .. code-block:: python
 
@@ -27,4 +26,3 @@ Reconstruction Types
 * ``RECON3D`` - 3D volume reconstruction
 * ``RECON2D`` - 2D slice reconstruction
 * ``RECONRZ`` - Cylindrical (R-Z) reconstruction
-

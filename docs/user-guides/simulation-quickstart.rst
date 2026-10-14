@@ -102,7 +102,6 @@ Additional Resources
 --------------------
 
 * See :doc:`config` for current 2D and 3D configuration examples
-* Check the configured ``log_file`` (``logs/EMC.log`` in the template) and
-  ``simdata.log`` for reconstruction and simulation progress
+* Check the configured ``log_file`` (``logs/EMC.log`` in the template) and ``simdata.log`` for reconstruction and simulation progress
 * Refer to :doc:`config` for description of configuration parameters
 * Refer to :doc:`simulator` for data stream simulator details

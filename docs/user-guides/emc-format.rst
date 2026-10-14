@@ -9,8 +9,7 @@ Sparse Photon Encoding
 High-resolution single-particle imaging patterns often contain few photons: most pixels receive zero or one photon. Rather than storing every pixel in each pattern, the sparse format stores only pixels with nonzero counts:
 
 * For a pixel receiving exactly one photon, only its pixel index is stored.
-* For a pixel receiving two or more photons, both its pixel index and its
-  photon count are stored.
+* For a pixel receiving two or more photons, both its pixel index and its photon count are stored.
 * Pixels absent from both lists have zero photons.
 
 Pixel indices are zero-based, from ``0`` to ``num_pix - 1``, and refer to the pixel ordering in the detector geometry file, not assembled image coordinates.  The photon file does not contain detector geometry; its pixel count and ordering must match the detector file used for reconstruction.

@@ -63,8 +63,7 @@ Install Python dependencies::
 
 .. note::
 
-    On managed systems, load the required compiler, MPI, HDF5, and GSL modules
-    before running the install commands.
+    On managed systems, load the required compiler, MPI, HDF5, and GSL modules before running the install commands.
 
 Install the package in editable mode::
 

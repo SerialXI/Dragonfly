@@ -21,8 +21,7 @@ For 2D reconstruction, generate in-plane rotations:
    quat = Quaternion(num_rot=360, point_group='1')  # 360 angles, no symmetry, default
    quat = Quaternion(num_rot=180, point_group='2')  # 180 angles, Friedel symmetry
 
-The sampling in both cases above is 1 degree. The former should be used when the 2D class
-averages are expected to not be centrosymmetric due to Ewald sphere curvature.
+The sampling in both cases above is 1 degree. The former should be used when the 2D class averages are expected to not be centrosymmetric due to Ewald sphere curvature.
 
 Point Groups
 ------------

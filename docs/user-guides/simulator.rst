@@ -1,8 +1,7 @@
 Data Stream Simulator
 =====================
 
-The data stream simulator generates synthetic single-particle diffraction data
-from PDB files, including realistic noise and photon statistics.
+The data stream simulator generates synthetic single-particle diffraction data from PDB files, including realistic noise and photon statistics.
 
 sim_setup
 ---------
@@ -15,6 +14,7 @@ Convenience utility that runs the simulator pipeline sequentially:
     Runs through simulation utilities to generate data.
 
     This is a convenience wrapper that sequentially executes:
+
     * :func:`make_densities <dragonfly.utils.make_densities.make_dens>`
     * :func:`make_intensities <dragonfly.utils.make_intensities.make_intens>`
     * :func:`make_detector <dragonfly.utils.make_detector.make_detector>`
@@ -51,11 +51,9 @@ Creates electron density map from PDB file using atomic scattering factors.
         dragonfly.utils.make_densities
         dragonfly.utils.make_densities -c config.ini
 
-    **Output**: Binary file containing 3D cubic electron density distribution
-    at the appropriate voxel size.
+    **Output**: Binary file containing 3D cubic electron density distribution at the appropriate voxel size.
 
-    A low-pass filter eliminates artifacts from electron density
-    discretization on a cubic grid.
+    A low-pass filter eliminates artifacts from electron density discretization on a cubic grid.
 
 make_intensities
 ----------------
@@ -152,19 +150,20 @@ Data Format
 The simulator outputs photon data in sparse format with three arrays:
 
 #. **Single-photon locations** (variable):
+
    - Pixel indices where exactly one photon was detected
 
 #. **Multi-photon locations** (variable):
+
    - Pixel indices for multi-photon events
 
 #. **Multi-photon counts** (variable):
+
    - Photon count at each multi-photon pixel
 
-This sparse format is efficient for high-resolution SPI where most
-pixels receive zero or one photon.
+This sparse format is efficient for high-resolution SPI where most pixels receive zero or one photon.
 
-See :doc:`emc-format` for the binary block layout, historical format diagram,
-header extensions, and HDF5 representation.
+See :doc:`emc-format` for the binary block layout, historical format diagram, header extensions, and HDF5 representation.
 
 Pipeline Flow
 -------------

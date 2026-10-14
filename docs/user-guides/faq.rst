@@ -111,8 +111,7 @@ Check that ``$DISPLAY`` is set and that your local machine has an X server.  The
 Dragonfly outputs h5 files for every iteration. Use:
 
 * The autoplot GUI
-* Custom Python code to read the ``intens`` dataset. It has shape
-  ``(num_modes, size, size, size)`` for 3D and ``(num_modes, size, size)`` for 2D.
+* Custom Python code to read the ``intens`` dataset. It has shape ``(num_modes, size, size, size)`` for 3D and ``(num_modes, size, size)`` for 2D.
 
 Performance
 -----------

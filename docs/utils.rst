@@ -1,8 +1,7 @@
 Utilities
 ==========
 
-The utilities directory contains Python utilities, command-line tools, and Cython
-extensions for data processing and simulation.
+The utilities directory contains Python utilities, command-line tools, and Cython extensions for data processing and simulation.
 
 Command-line Tools
 ------------------
