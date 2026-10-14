@@ -60,6 +60,8 @@ Generate the detector file by running::
 
     dragonfly.utils.make_detector
 
+See :doc:`detector-format` for the HDF5 geometry fields, units, and pixel masks.
+
 Data Conversion
 ---------------
 

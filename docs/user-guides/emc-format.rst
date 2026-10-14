@@ -24,6 +24,8 @@ pixel ordering in the detector geometry file, not assembled image coordinates.
 The photon file does not contain detector geometry; its pixel count and ordering
 must match the detector file used for reconstruction.
 
+See :doc:`detector-format` for the detector geometry datasets and mask values.
+
 Historical Binary Layout
 ------------------------
 

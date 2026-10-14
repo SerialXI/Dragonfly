@@ -109,13 +109,15 @@ Generates detector geometry file with pixel information.
         dragonfly.utils.make_detector
         dragonfly.utils.make_detector -c config.ini
 
-    **Output**: Detector geometry file (``.h5`` or ``.dat``) containing:
+    **Output**: HDF5 detector geometry file (conventionally ``.h5``) containing:
 
-    * Detector distance
-    * Pixel size
-    * Beam center coordinates
+    * Reciprocal-space pixel coordinates
+    * Solid-angle and polarization correction factors
     * Mask information
+    * Detector distance in detector-pixel units
     * Ewald sphere radius
+
+    See :doc:`detector-format` for the dataset layout, units, and mask values.
 
 make_data
 ---------
@@ -177,7 +179,7 @@ Pipeline Flow
     make_intensities --> intensities.bin
        |
        v
-    make_detector --> det_geom.dat
+    make_detector --> det_geom.h5
        |
        v
     make_data --> photons.emc
