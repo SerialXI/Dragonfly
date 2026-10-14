@@ -55,9 +55,15 @@ If Dragonfly warns that the oversampling ratio is high, the usual remedies are:
 Both changes make a speckle span fewer detector pixels, which reduces the amount
 of zero-padding needed in the simulated intensity volume.
 
-What EMC Does Not Do
---------------------
+Experimental Data
+-----------------
 
-EMC reconstructs the reciprocal-space intensity volume. Recovering a real-space
-density or structure still requires phase retrieval or another downstream
-inversion method.
+The warning above concerns generating simulated intensities. For data already
+collected, the detector distance is fixed. You can reduce excessive sampling
+by summing neighboring pixels into larger bins, provided the resulting pixels
+still resolve the features of interest. Update the pixel size, beam center,
+mask, and detector geometry consistently with the binned photon data.
+
+Cropping a detector reduces its reciprocal-space extent and pixel count, but does not
+change the pixel spacing or the number of pixels across a speckle. **Cropping
+does not reduce oversampling.**
