@@ -58,6 +58,8 @@ where :math:`n` is ``num_div``, before any point-group symmetry reduction.
 
 This count grows quickly, so increasing ``num_div`` improves angular resolution at a significant computational cost.
 
+Coarse-to-fine refinement avoids a full global search at the fine sampling by restricting each frame to neighborhoods of its likely coarse orientations. Its two-value notation is ``num_div = fine coarse``; see :ref:`orientation-refinement` for the workflow, the role of saved probabilities, and its current implementation status in the Python package.
+
 For 2D, ``num_rot`` sets the number of in-plane angles and ``num_modes`` sets the number of classes. Angles span 360 degrees by default, or 180 degrees with ``friedel_sym = 1``. Centrosymmetry is not automatic for an arbitrary measured pattern, especially with appreciable Ewald curvature; impose it only when justified. See :doc:`../user-guides/config` for example configurations.
 
 Deterministic Annealing

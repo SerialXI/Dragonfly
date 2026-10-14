@@ -67,6 +67,28 @@ For patterns expected to come from a common 3D intensity distribution::
 
 Use different output folders and log files for independent runs. A run without ``-r`` starts again and will overwrite earlier results. The positional CLI argument is the number of iterations to run, including when resuming; it is not an option inside ``[emc]``.
 
+.. _orientation-refinement:
+
+3D Orientation Refinement
+~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Coarse-to-fine orientation refinement is a common way to reach high angular sensitivity in 3D without performing a global search on an increasingly dense grid. Two values of ``num_div`` specify the **fine sampling first, coarse sampling second**. For example, after a global reconstruction with ``num_div = 6``, the refinement setting is::
+
+    num_div = 12 6
+
+The first value sets the new orientation grid; the second identifies the coarse grid used for the earlier assignments. Fine orientations are mapped to their nearest coarse orientation (a Voronoi cell). Each frame is then compared only with fine orientations belonging to its allowed coarse cells, rather than with the entire fine grid. This reduces the cost of the search, but also means that an incorrect coarse assignment can constrain the subsequent refinement.
+
+In that workflow, refinement continues from a coarse reconstruction's model, scales, and orientation information. The previous ``log_file`` and ``output_folder`` identify the checkpoint when resuming; the photon-file order, geometry, mode count, and symmetry must remain consistent with the earlier assignments. The second ``num_div`` value is the checkpoint's sampling, not an iteration count or a second simultaneous global search.
+
+With ``save_prob = 1`` in the coarse run, its output retains multiple plausible coarse orientations per frame under ``probabilities/place``. Without saved probabilities, the standalone implementation falls back to each frame's most likely orientation. Saving probabilities before the final coarse iteration preserves more of the assignment uncertainty for refinement.
+
+The standalone ``probs_file`` option can pin the coarse restrictions to a particular checkpoint, for example::
+
+    num_div = 12 6
+    probs_file = data/output_100.h5
+
+Here ``output_100.h5`` must come from the coarse grid of 6 subdivisions. Without an explicit ``probs_file``, the standalone resume path uses the last iteration output. Keeping the coarse checkpoint separately and referring to it explicitly avoids confusing fine-grid probabilities with coarse-grid indices when continuing a refinement stage. ``probs_file`` is not currently read by the Python setup.
+
 Geometry Parameters
 -------------------
 
@@ -251,6 +273,8 @@ Sampling and Symmetry
        integer.
    * - ``num_div``
      - | Positive subdivision count for 3D orientation sampling, required for a 3D run.
+       | One value selects a global grid; two values mean fine/coarse refinement.
+       | See :ref:`orientation-refinement` for the workflow and implementation status.
        | Not used to set 2D sampling.
    * - ``num_rot``
      - | Positive number of in-plane angular samples, required for a 2D run.

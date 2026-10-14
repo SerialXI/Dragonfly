@@ -95,7 +95,7 @@ Inspect the first converted file before configuring reconstruction::
 
 Click 'Random' to inspect several patterns. Check the beam center, mask, detector layout, and count values. A powder sum is also useful::
 
-    dragonfly.frameviewer -e data/run_001.emc -d data/det_pnccd_back.h5 -M -P
+    dragonfly.frameviewer -e data/photons_182.emc -d data/det_pnccd_back.h5 -M -P
 
 EMC Parameters
 --------------
@@ -113,14 +113,13 @@ Replace the template's entire ``[emc]`` section with the following. In particula
     beta = auto
     beta_schedule = 1.41421356 10
 
-Create ``experiment_files.txt`` with one photon-file path per line, in the
-order you want frames concatenated. Prefer absolute paths so that the same list
-works in both reconstruction and GUI tools::
+Create ``experiment_files.txt`` with one photon-file path per line, in the order you want frames concatenated. Prefer absolute paths so that the same list works in both reconstruction and GUI tools::
 
-    /absolute/path/to/spi_0001/data/run_001.emc
-    /absolute/path/to/spi_0001/data/run_002.emc
+    /absolute/path/to/spi_0001/data/photons_182.emc
+    /absolute/path/to/spi_0001/data/photons_183.emc
 
 ``beta = auto`` estimates a starting value per frame. The schedule multiplies those starting values by approximately sqrt(2) every 10 iterations, up to a maximum effective beta of one. This controls the sharpness of orientation probabilities. 
+
 Running and Monitoring
 ----------------------
 
@@ -143,6 +142,11 @@ Monitor reconstruction progress with the autoplot GUI::
     dragonfly.autoplot
 
 This displays model slices, RMS model change, mutual information, likelihood, and best-match assignments across iterations. See :doc:`autoplot` for controls and measured/model comparisons.
+
+Orientation Refinement
+----------------------
+
+A coarse global reconstruction is often followed by local refinement on a finer orientation grid. For this example, ``num_div = 20 10`` denotes a fine grid of 20 subdivisions with restrictions obtained from the earlier grid of 10 subdivisions. The :ref:`orientation-refinement` section describes the checkpoint information used by this workflow, saved coarse probabilities, and the current limitation in the Python package's refinement setup.
 
 Check Your Work
 ---------------
