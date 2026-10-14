@@ -64,6 +64,9 @@ cdef class EMCRecon():
         if itr.iter.par == NULL:
             print('Set params for iterate first')
             return
+        if itr.iter.par.refine and (itr.iter.quat_mapping == NULL or
+                                   itr.iter.num_rel_quat == NULL or itr.iter.rel_quat == NULL):
+            raise ValueError('Load coarse orientation restrictions before refinement')
 
         itr.iter.quat.num_rot_p = itr.quat.divide(MPI.COMM_WORLD.rank, MPI.COMM_WORLD.size, itr.iter.par.num_modes, itr.iter.par.nonrot_modes)
         itr.iter.par.rank = MPI.COMM_WORLD.rank
