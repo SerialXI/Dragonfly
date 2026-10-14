@@ -38,7 +38,8 @@ The :doc:`background/emc-algorithm` explains how the models and frame assignment
    :maxdepth: 1
    :caption: Background
 
-   background/index
+   background/emc-algorithm
+   background/oversampling
 
 .. toctree::
    :maxdepth: 2

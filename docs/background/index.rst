@@ -1,8 +1,7 @@
+:orphan:
+
 Background
 ==========
 
-.. toctree::
-   :maxdepth: 1
-
-   emc-algorithm
-   oversampling
+* :doc:`emc-algorithm`
+* :doc:`oversampling`
